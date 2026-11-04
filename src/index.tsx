@@ -574,7 +574,7 @@ function MapPanel({ view, rotating, senate, house }: { view: 'senate' | 'house';
       <div className="maptools">
         <div className="seg">
           {(rotating || view === 'senate') && <span className={view === 'senate' ? 'on' : ''}>Senate map</span>}
-          {(rotating || view === 'house') && <span className={view === 'house' ? 'on' : ''}>House flips by state</span>}
+          {(rotating || view === 'house') && <span className={view === 'house' ? 'on' : ''}>House flips</span>}
         </div>
       </div>
       <div className="mapbox"><UsMap view={view} senate={senate} house={house} /></div>
