@@ -393,7 +393,7 @@ function Num({ value, className }: { value: number; className?: string }) {
 
 function Gain({ party, label, t, note }: { party: Party; label: string; t: Tally; note?: string }) {
   const net = party === 'D' || party === 'R' ? `Net ${sign(t.net[party])}` : note ?? '';
-  const likely = t.likely[party] ? ` · ${t.likely[party]} more likely` : '';
+  const likely = t.likely[party] ? ` · +${t.likely[party]} likely` : '';
   return (
     <div className={`gain ${party}`}>
       <span className="lbl">{label}</span>
@@ -418,12 +418,16 @@ function ChamberPanel({ chamber, t }: { chamber: 'senate' | 'house'; t: Tally })
     : `Dems need ${dNeed} more · GOP needs ${rNeed} more`;
   const verdictColor = dNeed <= 0 ? COLOR.dem : rNeed <= 0 ? COLOR.rep : undefined;
   const showI = senate || t.gains.I > 0 || won.I > 0;
-  const aheadNote = (p: Party) => (ahead[p] ? <em> +{ahead[p]} ahead</em> : null);
+  const aheadNote = (p: Party) => (ahead[p] ? <em>+{ahead[p]} ahead</em> : null);
   return (
     <div className="panel">
       <div className="panel-h">
         <h2>{senate ? 'Senate' : 'House'}</h2>
-        <span className="small">{t.called} of {t.total} called{won.I ? ` · ${won.I} Ind` : ''}</span>
+        {/* What each party is on course for, by this board's estimate. */}
+        <span className="small">
+          {t.called} of {t.total} called · Expected <b className="pD">{Math.round(expected.D)}</b>–<b className="pR">{Math.round(expected.R)}</b>
+          {expected.I >= 0.5 ? <>–<b className="pI">{Math.round(expected.I)}</b></> : null}
+        </span>
       </div>
       <div className={`gains${showI ? ' three' : ''}`}>
         <Gain party="D" label="Dem gains" t={t} />
@@ -441,9 +445,9 @@ function ChamberPanel({ chamber, t }: { chamber: 'senate' | 'house'; t: Tally })
         <i className="mark" style={{ left: `calc(${(MAJORITY[chamber] / total) * 100}% - 0.07em)` }} />
       </div>
       <div className="barlegend">
-        <span className="D"><b>{won.D}</b> {senate ? 'Dem caucus' : 'Dem'}{aheadNote('D')}</span>
-        <span className="small">Expected {Math.round(expected.D)}–{Math.round(expected.R)}{expected.I >= 0.5 ? `–${Math.round(expected.I)}` : ''}</span>
-        <span className="R">{aheadNote('R')} <b>{won.R}</b> Republican</span>
+        <span className="D"><b>{won.D}</b> Dem{aheadNote('D')}</span>
+        {won.I > 0 && <span className="I"><b>{won.I}</b> Ind</span>}
+        <span className="R">{aheadNote('R')}<b>{won.R}</b> GOP</span>
       </div>
       <div className="verdict" style={{ color: verdictColor }}>{verdict}</div>
     </div>
@@ -626,13 +630,15 @@ function NextClose({ tz, senateStates }: { tz?: string; senateStates: Set<string
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   const s = Math.floor((ms % 60_000) / 1000);
-  const key = next.states.filter((st) => senateStates.has(st)).map((st) => NAMES[st] ?? st);
+  // Names for a few states; codes for a long list, so it fits on one line.
+  const name = (list: string[]) => (list.length > 3 ? list.join(', ') : listOf(list.map((st) => NAMES[st] ?? st)));
+  const key = next.states.filter((st) => senateStates.has(st));
   return (
     <section className="next">
       <span className="t">{h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}:${String(s).padStart(2, '0')}`}</span>
       <div className="what">
         <b>Polls close at {fmt.format(next.at)} {tzName(tz)}</b>
-        <span className="sts">{key.length ? `Senate races: ${listOf(key)}` : `States: ${listOf(next.states.map((st) => NAMES[st] ?? st))}`}.</span>
+        <span className="sts">{key.length ? `Senate races: ${name(key)}` : `States: ${name(next.states)}`}</span>
       </div>
     </section>
   );
@@ -710,7 +716,7 @@ function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<strin
     const sb = (pr.share[b.name] ?? 0) * 100;
     note = (
       <>
-        <span className="n"><b>{sa.toFixed(1)}%</b> – <b>{sb.toFixed(1)}%</b> · {lastName(a.name)} +{(sa - sb).toFixed(1)} · {Math.round(race.reporting)}% in</span>
+        <span className="n"><b>{sa.toFixed(1)}%</b> – <b>{sb.toFixed(1)}%</b> · {Math.round(race.reporting)}% in</span>
         <div className="h2hbar">
           <span className={`b${a.party}`} style={{ width: `${sa}%` }} />
           <span style={{ flex: 1 }} />

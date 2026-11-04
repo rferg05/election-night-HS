@@ -6,7 +6,7 @@ export const FONTS_HREF =
   'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap';
 
 export const COLOR = {
-  bg: '#0E1116', surface: '#161A21', surface2: '#1E232C', ink: '#E6E9EE', muted: '#97A0AF', line: '#2A303B',
+  bg: '#0E1116', surface: '#161A21', surface2: '#1E232C', ink: '#E6E9EE', muted: '#C3CAD5', line: '#2A303B',
   dem: '#6A9BF4', demSoft: '#18263F', rep: '#F2756B', repSoft: '#3A1C1A', ind: '#AE93E6', indSoft: '#2A2140',
   live: '#F0B444', liveSoft: '#33280F', ok: '#4FC28A',
   demHold: '#2D4C82', repHold: '#7A3631', indHold: '#4B3B73', mapNone: '#1C2028', mapOpen: '#3A414D', mapDone: '#4A5260',
@@ -81,7 +81,9 @@ export const CSS = `
 .en26 .barlegend .small{font-size:1em}
 .en26 .barlegend b{font-family:var(--f-display);font-size:1.5em;font-variant-numeric:tabular-nums}
 .en26 .barlegend .D b{color:var(--dem)}.en26 .barlegend .R b{color:var(--rep)}
-.en26 .barlegend em{font-style:normal;color:var(--muted)}
+.en26 .barlegend em{font-style:normal;color:var(--muted);margin:0 .35em}
+.en26 .barlegend .I b{color:var(--ind)}
+.en26 .panel-h .small b{font-weight:700}
 .en26 .verdict{font-weight:700;font-size:.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* map */
