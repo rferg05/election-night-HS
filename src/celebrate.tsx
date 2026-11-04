@@ -1,6 +1,7 @@
 // Over the module when Democrats win a seat: blue fireworks and confetti for a
 // win, and for a seat taken from the Republicans a flip, where a red banner
-// turns over to blue and only then do the confetti and fireworks start. Drawn on one
+// turns over to blue and only then do the confetti and fireworks start. When
+// they win control of a chamber, a bigger banner and a bigger show. Drawn on one
 // canvas, with modest particle counts so a Raspberry Pi keeps up.
 
 import React, { useEffect, useRef } from 'react';
@@ -16,11 +17,17 @@ export interface Win {
   senate: boolean;
 }
 
+export type Chamber = 'senate' | 'house';
+
 export interface Celebration {
   id: number;
   wins: Win[];
   /** Show it as a flip: red turning blue. */
   flip: boolean;
+  /** The chambers Democrats have won control of, for a control celebration. */
+  control?: Chamber[];
+  /** Seats won in each chamber, for its banner. */
+  seats?: Record<Chamber, number>;
 }
 
 const BLUES = ['#6A9BF4', '#1C5BCC', '#9DB9EC', '#3D7BEA', '#C9DAFB', '#FFFFFF'];
@@ -30,13 +37,14 @@ const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 export const FLIP_AT = 1600;
 
 /** How long a celebration runs: longest for a flip, then a Senate seat. */
-export const lengthOf = (c: Celebration) => (c.flip ? 12_000 : c.wins.some((w) => w.senate || w.gain) ? 10_000 : 7_000);
+export const lengthOf = (c: Celebration) =>
+  c.control?.length ? 15_000 : c.flip ? 12_000 : c.wins.some((w) => w.senate || w.gain) ? 10_000 : 7_000;
 
 interface Spark { x: number; y: number; vx: number; vy: number; born: number; life: number; color: string; size: number }
 interface Rocket { x: number; y: number; vy: number; burstAt: number; color: string }
 interface Bit { x: number; y: number; vy: number; sway: number; phase: number; spin: number; angle: number; w: number; h: number; color: string; turn: number }
 
-function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duration: number, flipAt: number | null) {
+function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duration: number, flipAt: number | null, grand = false) {
   useEffect(() => {
     const el = canvas.current;
     const ctx = el?.getContext('2d');
@@ -89,14 +97,16 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
       ctx.clearRect(0, 0, W, H);
       ctx.globalAlpha = fade;
 
-      // The moment of a flip: a ring of big bursts across the module.
-      if (flipAt != null && !flipped && t >= flipAt) {
+      // The moment of a flip, or the start of a grand show: a ring of big
+      // bursts across the module.
+      const ringAt = flipAt ?? (grand ? 300 : null);
+      if (ringAt != null && !flipped && t >= ringAt) {
         flipped = true;
         for (let i = 0; i < 4; i++) burst(W * (0.2 + i * 0.2), H * (0.25 + (i % 2) * 0.12), pick(BLUES.slice(0, 4)), now, true);
       }
       if (t < duration - 2200 && now >= nextRocket) {
         rockets.push({ x: W * (0.12 + Math.random() * 0.76), y: H, vy: -(H * (0.9 + Math.random() * 0.35)), burstAt: H * (0.12 + Math.random() * 0.3), color: pick(BLUES.slice(0, 5)) });
-        nextRocket = now + (flipAt == null ? 280 : 200) + Math.random() * 380;
+        nextRocket = now + (grand ? 110 : flipAt == null ? 280 : 200) + Math.random() * (grand ? 220 : 380);
       }
 
       ctx.globalCompositeOperation = 'lighter';
@@ -161,7 +171,7 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [canvas, duration, flipAt]);
+  }, [canvas, duration, flipAt, grand]);
 }
 
 const listed = (wins: Win[]) =>
@@ -170,7 +180,8 @@ const listed = (wins: Win[]) =>
 export function CelebrationOverlay({ celebration, onDone }: { celebration: Celebration; onDone: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const duration = lengthOf(celebration);
-  useFireworks(canvas, duration, celebration.flip ? FLIP_AT : null);
+  const control = celebration.control ?? [];
+  useFireworks(canvas, duration, celebration.flip && !control.length ? FLIP_AT : null, control.length > 0);
   useEffect(() => {
     const t = setTimeout(onDone, duration);
     return () => clearTimeout(t);
@@ -178,6 +189,22 @@ export function CelebrationOverlay({ celebration, onDone }: { celebration: Celeb
 
   const { wins } = celebration;
   const one = wins.length === 1 ? wins[0] : null;
+
+  if (control.length) {
+    const both = control.length === 2;
+    const seats = celebration.seats;
+    const counts = control.map((ch) => `${seats?.[ch] ?? ''} ${ch === 'senate' ? 'Senate' : 'House'} seats`.trim());
+    return (
+      <div className="cele control" style={{ animationDuration: `${duration}ms` }}>
+        <canvas ref={canvas} />
+        <div className="cele-card control">
+          <span className="cele-flip">{both ? 'Control of Congress' : control[0] === 'senate' ? 'Senate control' : 'House control'}</span>
+          <b>{both ? 'Democrats win the House and Senate' : `Democrats win the ${control[0] === 'senate' ? 'Senate' : 'House'}`}</b>
+          <span>{counts.join(' · ')}</span>
+        </div>
+      </div>
+    );
+  }
 
   if (celebration.flip) {
     const flips = wins.filter((w) => w.fromR);

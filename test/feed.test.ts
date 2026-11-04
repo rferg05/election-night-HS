@@ -3,7 +3,7 @@ import { closeAt, decode, isElectionNews, newsItems, parseRss, pollItems, stateO
 import { fillHolders } from '../src/data';
 import type { Candidate, Race } from '../src/data';
 import { project } from '../src/projection';
-import { showingsOf, tally } from '../src/index';
+import { controlShowing, showingsOf, tally } from '../src/index';
 
 const rss = `<?xml version="1.0"?><rss><channel><title>Feed</title>
 <item><title><![CDATA[Ossoff holds Georgia Senate seat, AP projects]]></title><pubDate>Wed, 04 Nov 2026 01:10:00 GMT</pubDate></item>
@@ -118,5 +118,36 @@ describe('celebration showings', () => {
     expect(got?.wins).toHaveLength(1);
     expect(got?.flip).toBe(true);
     expect(showingsOf(cs, new Set(), t0, { ...cfg, celebrate: false }).due).toBeUndefined();
+  });
+});
+
+describe('control showings', () => {
+  const min = 60_000;
+  const t0 = 5_000_000;
+
+  it('plays when control is won, then every 10 minutes', () => {
+    const played = new Set<string>();
+    const first = controlShowing({ senate: t0 }, played, t0 + 2_000, 10);
+    expect(first.due).toMatchObject({ at: t0, chambers: ['senate'] });
+    played.add(first.due!.key);
+    expect(controlShowing({ senate: t0 }, played, t0 + 5 * min, 10)).toMatchObject({ due: undefined, nextAt: t0 + 10 * min });
+    expect(controlShowing({ senate: t0 }, played, t0 + 10 * min, 10).due?.at).toBe(t0 + 10 * min);
+    // Hours later it's still going.
+    expect(controlShowing({ senate: t0 }, played, t0 + 120 * min + 1_000, 10).due?.at).toBe(t0 + 120 * min);
+  });
+
+  it('skips a showing it missed, and waits for the next', () => {
+    expect(controlShowing({ house: t0 }, new Set(), t0 + 4 * min, 10)).toMatchObject({ due: undefined, nextAt: t0 + 10 * min });
+  });
+
+  it('starts over with both chambers when the second is won', () => {
+    const got = controlShowing({ senate: t0, house: t0 + 7 * min }, new Set(), t0 + 7 * min, 10);
+    expect(got.due).toMatchObject({ at: t0 + 7 * min, chambers: ['senate', 'house'] });
+    expect(got.nextAt).toBe(t0 + 17 * min);
+  });
+
+  it('has nothing to show before control is won', () => {
+    expect(controlShowing({}, new Set(), t0, 10)).toEqual({});
+    expect(controlShowing(null, new Set(), t0, 10)).toEqual({});
   });
 });

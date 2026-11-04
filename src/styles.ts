@@ -191,7 +191,7 @@ export const CSS = `
 .cele{position:absolute;inset:0;z-index:20;pointer-events:none;animation:en26cele linear both;font-family:var(--f-display);color:#fff}
 @keyframes en26cele{0%{background:rgba(10,24,56,0)}6%{background:rgba(10,24,56,.55)}88%{background:rgba(10,24,56,.55)}100%{background:rgba(10,24,56,0)}}
 .cele canvas{position:absolute;inset:0;width:100%;height:100%}
-.cele-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.25em;padding:.6em 1.6em .7em;border-radius:.4em;background:rgba(28,91,204,.88);box-shadow:0 0 0 .12em rgba(201,218,251,.6),0 1em 3em rgba(0,0,0,.5);text-align:center;max-width:85%;animation:en26card .7s cubic-bezier(.2,1.4,.4,1) both}
+.cele-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.25em;padding:.6em 1.6em .7em;border-radius:.4em;background:rgba(28,91,204,.88);box-shadow:0 0 0 .12em rgba(201,218,251,.6),0 1em 3em rgba(0,0,0,.5);text-align:center;width:max-content;max-width:90%;animation:en26card .7s cubic-bezier(.2,1.4,.4,1) both}
 @keyframes en26card{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 .cele-card b{font-size:4.2em;font-weight:700;line-height:1;text-transform:uppercase;letter-spacing:.02em}
 .cele-card span{font-family:var(--f-body);font-size:1.5em;font-weight:600}
@@ -213,5 +213,9 @@ export const CSS = `
   100%{opacity:1;transform:translate(-50%,-50%) perspective(60em) scale(1);background:rgba(28,91,204,.88)}}
 @keyframes en26front{0%,62.4%{opacity:1}62.6%,100%{opacity:0}}
 @keyframes en26back{0%,62.4%{opacity:0}62.6%,100%{opacity:1}}
+.cele-card.control{padding:.7em 2em .9em;box-shadow:0 0 0 .15em #F0B444,0 0 2.5em .4em rgba(240,180,68,.45),0 1em 3em rgba(0,0,0,.5);animation:en26card .8s cubic-bezier(.2,1.4,.4,1) both,en26glow 2.4s ease-in-out .8s infinite}
+.cele-card.control b{font-size:4.4em;line-height:.95}
+.cele-card.control .cele-flip{background:#F0B444;color:#1a1405}
+@keyframes en26glow{0%,100%{box-shadow:0 0 0 .15em #F0B444,0 0 2.5em .4em rgba(240,180,68,.45),0 1em 3em rgba(0,0,0,.5)}50%{box-shadow:0 0 0 .15em #F0B444,0 0 4em .9em rgba(240,180,68,.7),0 1em 3em rgba(0,0,0,.5)}}
 @media (prefers-reduced-motion:reduce){.en26 *{animation:none!important;transition:none!important}}
 `;

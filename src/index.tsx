@@ -16,7 +16,7 @@ import { GEO, MAP_SIZE, NAMES } from './geo';
 import { HOUSE_WATCH } from './watch';
 import { COLOR, CSS, FONTS_HREF } from './styles';
 import { CelebrationOverlay } from './celebrate';
-import type { Celebration, Win } from './celebrate';
+import type { Celebration, Chamber as Body, Win } from './celebrate';
 
 /** After a failed load, try again this soon. */
 const RETRY_MS = 30_000;
@@ -77,18 +77,40 @@ interface Store {
   celebrations: Celebration[];
   /** Showings already played, as "id:n". */
   played: Set<string>;
+  /** When this module first saw Democrats win control of each chamber. */
+  control: Partial<Record<Body, number>> | null;
 }
 
 const store: Store = {
   senate: null, house: null, school: [], schoolFailed: false,
   schoolLoadedAt: 0, schoolLoading: null, failure: null, loadedAt: 0, savedAt: 0, loading: null,
-  news: [], newsLoadedAt: 0, newsLoading: null, calls: null, callsPrimed: false, leaders: {}, leads: [], wins: [], celebrations: [], played: new Set(),
+  news: [], newsLoadedAt: 0, newsLoading: null, calls: null, callsPrimed: false, leaders: {}, leads: [], wins: [], celebrations: [], played: new Set(), control: null,
 };
 
 /** Re-render on a partial load. */
 const listeners = new Set<() => void>();
 
 const CALLS_KEY = `${PLUGIN_ID}:calls:2026-11-03`;
+const CONTROL_KEY = `${PLUGIN_ID}:control:2026-11-03`;
+
+/** Notes when Democrats have won control of a chamber, by called seats
+ *  alone, kept in the browser so a restart keeps the replay times. */
+function trackControl(won: Partial<Record<Body, boolean>>) {
+  if (!store.control) {
+    try { store.control = JSON.parse(localStorage.getItem(CONTROL_KEY) ?? '{}') ?? {}; } catch { store.control = {}; }
+  }
+  let changed = false;
+  for (const ch of ['senate', 'house'] as const) {
+    if (won[ch] && !store.control![ch]) {
+      store.control![ch] = Date.now();
+      changed = true;
+      log('info', `Democrats have won the ${ch}`);
+    }
+  }
+  if (changed) {
+    try { localStorage.setItem(CONTROL_KEY, JSON.stringify(store.control)); } catch { /* full or blocked */ }
+  }
+}
 
 const describe = (e: unknown) => (e instanceof SourceError ? `civicAPI answered with an error (${e.status})` : "Can't reach civicAPI");
 
@@ -945,22 +967,35 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
 
   const gap = cfg.celebrateEvery * 60_000;
   const late = Math.min(3 * 60_000, gap);
-  const { due, nextAt } = showingsOf(data.celebrations, data.played, Date.now(), cfg);
-  const celebration = due ? { ...due.c, id: due.at } : undefined;
+  // Control of a chamber, by called seats only: 51 in the Senate (the vice
+  // president breaks a 50–50 tie for the GOP), 218 in the House.
+  const senateWon = !!data.senate && senateT.seats.won.D >= MAJORITY.senate;
+  const houseWon = !!data.house && houseT.seats.won.D >= MAJORITY.house;
+  useEffect(() => trackControl({ senate: senateWon, house: houseWon }), [senateWon, houseWon]);
+  const now = Date.now();
+  const ctrl = cfg.celebrateControl ? controlShowing(data.control, data.played, now, cfg.controlEvery) : {};
+  const wins = showingsOf(data.celebrations, data.played, now, cfg);
+  // Control comes first; the wins wait their turn.
+  const due = ctrl.due ? null : wins.due;
+  const celebration: Celebration | undefined = ctrl.due
+    ? { id: ctrl.due.at, wins: [], flip: false, control: ctrl.due.chambers, seats: { senate: senateT.seats.won.D, house: houseT.seats.won.D } }
+    : due ? { ...due.c, id: due.at } : undefined;
+  const nextAt = Math.min(ctrl.nextAt ?? Infinity, wins.nextAt ?? Infinity);
   const [, setDone] = useState(0);
   // Come back for the next showing, however quiet the count is by then.
   useEffect(() => {
-    if (!nextAt) return;
+    if (!Number.isFinite(nextAt)) return;
     const t = setTimeout(() => setDone((n) => n + 1), nextAt - Date.now() + 50);
     return () => clearTimeout(t);
   }, [nextAt]);
   const finish = useCallback(() => {
-    if (due) store.played.add(due.key);
+    if (ctrl.due) store.played.add(ctrl.due.key);
+    else if (due) store.played.add(due.key);
     // A celebration with every showing behind it is done with.
     const end = (cfg.celebrateTimes - 1) * gap + late;
     store.celebrations = store.celebrations.filter((c) => Date.now() - c.id < end);
     setDone((n) => n + 1);
-  }, [due?.key, cfg.celebrateTimes, gap, late]);
+  }, [ctrl.due?.key, due?.key, cfg.celebrateTimes, gap, late]);
 
   const view = cfg.map === 'rotate' ? (mapStep % 2 === 0 ? 'senate' : 'house') : cfg.map;
   const portrait = box.h > box.w * 1.05;
@@ -1061,6 +1096,35 @@ export function showingsOf(
     due: showings.find((s) => s.at <= now && now - s.at < late),
     nextAt: showings.find((s) => s.at > now)?.at,
   };
+}
+
+/** The control celebration due now, and when the next one is: from the last
+ *  chamber won, every `everyMinutes`, for the rest of the night. A showing
+ *  more than 3 minutes late (the module was off screen) is skipped. */
+export function controlShowing(
+  control: Partial<Record<Body, number>> | null,
+  played: Set<string>,
+  now: number,
+  everyMinutes: number,
+): { due?: { key: string; at: number; chambers: Body[] }; nextAt?: number } {
+  const chambers = (['senate', 'house'] as const).filter((ch) => control?.[ch]);
+  if (!chambers.length) return {};
+  // A second chamber won starts the round again, so both show at once.
+  const from = Math.max(...chambers.map((ch) => control![ch]!));
+  const gap = everyMinutes * 60_000;
+  const n = Math.max(0, Math.floor((now - from) / gap));
+  const at = from + n * gap;
+  const key = `control:${from}:${n}`;
+  const fresh = now >= at && now - at < Math.min(3 * 60_000, gap) && !played.has(key);
+  return { due: fresh ? { key, at, chambers: [...chambers] } : undefined, nextAt: from + (n + 1) * gap };
+}
+
+/** Starts a control celebration as if Democrats had just won these chambers:
+ *  for the preview page. */
+export function celebrateControlForPreview(chambers: Body[]) {
+  store.control = { ...(store.control ?? {}) };
+  for (const ch of chambers) store.control[ch] = Date.now();
+  for (const l of listeners) l();
 }
 
 /** Starts a celebration as if these seats had just been called: for the

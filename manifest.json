@@ -1,7 +1,7 @@
 {
   "id": "election-night",
   "name": "Election Night",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "A full-screen board of live results for the 3 November 2026 House and Senate races, laid out like a broadcast board: party gains and seat counts toward a majority, a map of calls and flips, the next poll closing, a race desk that pages through every Senate race and the competitive House seats with who's likely to win as votes come in, a live feed of calls and election headlines from the last half hour, and the Chicago Board of Education president and District 6A.",
   "author": "Ryan",
   "license": "MIT",
@@ -21,7 +21,9 @@
     "textScale": 1,
     "celebrateFlips": true,
     "celebrateTimes": 3,
-    "celebrateEvery": 3
+    "celebrateEvery": 3,
+    "celebrateControl": true,
+    "controlEvery": 10
   },
   "defaultSize": {
     "w": 1920,
@@ -134,6 +136,22 @@
         "title": "Replay every (minutes)",
         "minimum": 1,
         "maximum": 15,
+        "ui:widget": "slider",
+        "ui:step": 1,
+        "ui:group": "Celebration"
+      },
+      "celebrateControl": {
+        "type": "boolean",
+        "title": "Celebrate Democratic control",
+        "description": "“Democrats win the Senate” or “…the House” once enough seats are called: 51 in the Senate (the vice president breaks ties for the GOP), 218 in the House. Plays when it happens, then on repeat.",
+        "ui:widget": "toggle",
+        "ui:group": "Celebration"
+      },
+      "controlEvery": {
+        "type": "number",
+        "title": "Replay control every (minutes)",
+        "minimum": 1,
+        "maximum": 60,
         "ui:widget": "slider",
         "ui:step": 1,
         "ui:group": "Celebration"

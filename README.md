@@ -18,6 +18,7 @@ The layout follows the Election Night 2026 board it's modelled on (dark theme, s
 - **Live feed.** The last 30 minutes, newest first, a page at a time: race calls as this module sees them (every Senate race and the watched House seats), Senate lead changes, poll closings, and election headlines from AP, CBS News, The New York Times, PBS and NPR. Three to a page on a full screen, each with up to three lines of headline. Items from the last 3 minutes are highlighted.
 - **Democratic wins.** When a race is called for a Democrat, blue fireworks and confetti play over the module with a banner naming the seat: 10 seconds for a Senate seat or a pickup, 7 for anything else. Wins called in the same update share one celebration ("5 Democratic wins"). Each celebration plays three times, 3 minutes apart: when the race is called, then twice more (both settings). Calls already made the first time the module ever runs don't set it off, and a showing more than 3 minutes late, say because the module was off screen, is skipped.
 - **Democratic flips.** When Democrats take a seat the Republicans held, it's a flip instead: the banner starts red ("Republican seat · Maine Senate"), turns over to blue ("Democratic flip"), and only then do the blue confetti (in a wave across the screen) and fireworks start (12 seconds). An update with flips and other wins shows the flips and counts the rest. Each kind can be turned off on its own in the settings; with only flips on, other wins don't celebrate.
+- **Democratic control.** Once enough seats are called for the Democrats (51 in the Senate, counting the seats not up this year, since the Republican vice president breaks a 50–50 tie; 218 in the House), a bigger show plays: a gold-edged banner, "Democrats win the Senate" (or the House, or both), with denser fireworks, for 15 seconds. It plays when control is won and every 10 minutes after that for the rest of the night, ahead of any win or flip celebration due at the same time. Winning the second chamber starts the round again with both. The time control was won is kept in the browser, so a restart keeps the same 10-minute rhythm.
 - **Chicago Board of Education.** The board president's race and District 6A: the leader and runner-up with their shares and a bar, and the share counted, marked once AP calls it. It takes little room, so the live feed above it gets the rest.
 
 ## Who's likely to win
@@ -63,6 +64,8 @@ civicAPI was overloaded on election night, with stretches of 502 errors and minu
 | Celebrate Democratic flips | on | Red turning blue, for a seat taken from the Republicans. |
 | Play each celebration | 3 times | 1 to 5. |
 | Replay every | 3 min | 1 to 15 minutes. |
+| Celebrate Democratic control | on | |
+| Replay control every | 10 min | 1 to 60 minutes. |
 | Chicago Board of Education | on | |
 
 ## Install
@@ -83,7 +86,7 @@ Preview options:
 - `?sim=40` fills every race with a made-up count about 40% in, so you can check the layout and likelihoods before real votes arrive.
 - `?board=fake` shows stand-in school board results in place of the Sun-Times'.
 - `?map=house`, `?w=1080&h=1920` and similar change the map view and module size.
-- The **Celebrate win**, **Celebrate flip** and **Celebrate 4** buttons play the celebrations.
+- The **Celebrate win**, **Celebrate flip** and **Celebrate 4** buttons play the celebrations; **Win Senate** and **Win both** start the control celebration (for the preview only).
 
 To package: copy `manifest.json` and `dist/bundle.js(.map)` into `release/pkg/election-night/`, then run
 `tar -czf release/election-night-<version>.tar.gz -C release/pkg election-night`. Copy the result to `release/election-night.tar.gz` and attach both to a GitHub release tagged `v<version>`.

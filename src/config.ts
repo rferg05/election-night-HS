@@ -20,6 +20,10 @@ export interface Config {
   celebrateTimes: number;
   /** …this many minutes apart. */
   celebrateEvery: number;
+  /** A celebration when Democrats win control of a chamber… */
+  celebrateControl: boolean;
+  /** …repeated this many minutes apart for the rest of the night. */
+  controlEvery: number;
   schoolBoard: boolean;
 }
 
@@ -45,6 +49,8 @@ export function readConfig(raw: Record<string, unknown>): Config {
     celebrateFlips: bool(raw.celebrateFlips, true),
     celebrateTimes: Math.round(num(raw.celebrateTimes, 3, 1, 5)),
     celebrateEvery: num(raw.celebrateEvery, 3, 1, 15),
+    celebrateControl: bool(raw.celebrateControl, true),
+    controlEvery: num(raw.controlEvery, 10, 1, 60),
     schoolBoard: bool(raw.schoolBoard, true),
   };
 }

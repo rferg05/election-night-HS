@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import manifest from '../manifest.json';
-import ElectionNight, { celebrateForPreview } from '../src/index';
+import ElectionNight, { celebrateControlForPreview, celebrateForPreview } from '../src/index';
 import type { Fetcher } from '../src/data';
 import { makeHostDisplayCache } from './host-cache';
 import { simulate } from './simulate';
@@ -76,6 +76,8 @@ function Harness() {
           { title: 'IL-07', name: 'Danny Davis', gain: false, fromR: false, senate: false },
           { title: 'NY-17', name: 'Cait Conley', gain: true, fromR: true, senate: false },
         ])}>Celebrate 4</button>
+        <button style={btn} onClick={() => celebrateControlForPreview(['senate'])}>Win Senate</button>
+        <button style={btn} onClick={() => celebrateControlForPreview(['senate', 'house'])}>Win both</button>
         <span>{w}{'×'}{h} {'·'} add ?sim=40 for a made-up count, ?board=fake, ?map=house{'…'} to the URL</span>
       </div>
       <div id="module" style={{ width: w, height: h, resize: 'both', overflow: 'hidden' }}>
