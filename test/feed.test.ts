@@ -3,7 +3,7 @@ import { closeAt, decode, isElectionNews, newsItems, parseRss, pollItems, stateO
 import { fillHolders } from '../src/data';
 import type { Candidate, Race } from '../src/data';
 import { project } from '../src/projection';
-import { controlShowing, showingsOf, tally } from '../src/index';
+import { clockShowings, showingsOf, tally } from '../src/index';
 
 const rss = `<?xml version="1.0"?><rss><channel><title>Feed</title>
 <item><title><![CDATA[Ossoff holds Georgia Senate seat, AP projects]]></title><pubDate>Wed, 04 Nov 2026 01:10:00 GMT</pubDate></item>
@@ -112,6 +112,16 @@ describe('celebration showings', () => {
     expect(showingsOf(cs, new Set(), t0 + 4 * min, cfg).due?.key).toBe(`${t0}:1`);
   });
 
+  it('leaves flips out of the replays: they repeat on the clock', () => {
+    const mixed = [{ id: t0, wins: [win(false), win(true)], flip: false }];
+    const played = new Set([`${t0}:0`]);
+    const replay = showingsOf(mixed, played, t0 + 3 * min, cfg).due?.c;
+    expect(replay?.wins).toEqual([win(false)]);
+    expect(replay?.flip).toBe(false);
+    const flipsOnly = [{ id: t0, wins: [win(true)], flip: false }];
+    expect(showingsOf(flipsOnly, played, t0 + 3 * min, cfg).due).toBeUndefined();
+  });
+
   it('shows only flips when every-win celebrations are off', () => {
     const mixed = [{ id: t0, wins: [win(false), win(true)], flip: false }];
     const got = showingsOf(mixed, new Set(), t0, { ...cfg, celebrate: false }).due?.c;
@@ -121,33 +131,51 @@ describe('celebration showings', () => {
   });
 });
 
-describe('control showings', () => {
+describe('flips and control on the clock', () => {
   const min = 60_000;
-  const t0 = 5_000_000;
+  // Local times, as the module sees them on the Pi.
+  const at = (h: number, m: number, s = 0) => new Date(2026, 10, 3, h, m, s).getTime();
+  const flip = (id: string, when: number) => ({ id, at: when, win: { title: id, name: id, gain: true, fromR: true, senate: false } });
 
-  it('plays when control is won, then every 10 minutes', () => {
+  it('plays control when won, then on the tens of the hour', () => {
+    const won = at(21, 4);
     const played = new Set<string>();
-    const first = controlShowing({ senate: t0 }, played, t0 + 2_000, 10);
-    expect(first.due).toMatchObject({ at: t0, chambers: ['senate'] });
+    const first = clockShowings(won + 1_000, 10, played, { senate: won }, []);
+    expect(first.due).toMatchObject({ at: won, control: ['senate'] });
+    expect(first.nextAt).toBe(at(21, 10));
     played.add(first.due!.key);
-    expect(controlShowing({ senate: t0 }, played, t0 + 5 * min, 10)).toMatchObject({ due: undefined, nextAt: t0 + 10 * min });
-    expect(controlShowing({ senate: t0 }, played, t0 + 10 * min, 10).due?.at).toBe(t0 + 10 * min);
-    // Hours later it's still going.
-    expect(controlShowing({ senate: t0 }, played, t0 + 120 * min + 1_000, 10).due?.at).toBe(t0 + 120 * min);
+    expect(clockShowings(at(21, 6), 10, played, { senate: won }, []).due).toBeUndefined();
+    expect(clockShowings(at(21, 10, 5), 10, played, { senate: won }, []).due).toMatchObject({ at: at(21, 10), control: ['senate'] });
+    expect(clockShowings(at(23, 40, 30), 10, played, { senate: won }, []).due?.at).toBe(at(23, 40));
   });
 
-  it('skips a showing it missed, and waits for the next', () => {
-    expect(controlShowing({ house: t0 }, new Set(), t0 + 4 * min, 10)).toMatchObject({ due: undefined, nextAt: t0 + 10 * min });
+  it('leaves control out of a tick right after it was won', () => {
+    // Won at 9:08:30: shown then, not again at 9:10.
+    const won = at(21, 8, 30);
+    const played = new Set([`control:${won}`]);
+    expect(clockShowings(at(21, 10, 5), 10, played, { house: won }, []).due).toBeUndefined();
   });
 
-  it('starts over with both chambers when the second is won', () => {
-    const got = controlShowing({ senate: t0, house: t0 + 7 * min }, new Set(), t0 + 7 * min, 10);
-    expect(got.due).toMatchObject({ at: t0 + 7 * min, chambers: ['senate', 'house'] });
-    expect(got.nextAt).toBe(t0 + 17 * min);
+  it('plays the last three flips in turn, oldest first, after control', () => {
+    const flips = [flip('a', at(20, 1)), flip('b', at(20, 30)), flip('c', at(20, 45)), flip('d', at(21, 2)), flip('late', at(21, 15))];
+    const played = new Set<string>();
+    const order: string[] = [];
+    for (;;) {
+      const due = clockShowings(at(21, 10, 20), 10, played, { senate: at(20, 50) }, flips).due;
+      if (!due) break;
+      order.push(due.control ? 'control' : due.win!.title);
+      played.add(due.key);
+    }
+    // Not 'late': it was called after this tick.
+    expect(order).toEqual(['control', 'b', 'c', 'd']);
   });
 
-  it('has nothing to show before control is won', () => {
-    expect(controlShowing({}, new Set(), t0, 10)).toEqual({});
-    expect(controlShowing(null, new Set(), t0, 10)).toEqual({});
+  it('skips a tick it missed', () => {
+    expect(clockShowings(at(21, 14), 10, new Set(), null, [flip('a', at(20, 0))])).toEqual({ due: undefined, nextAt: at(21, 20) });
+  });
+
+  it('keeps to the hour for other gaps', () => {
+    expect(clockShowings(at(21, 31), 15, new Set(), null, [flip('a', at(20, 0))]).due?.at).toBe(at(21, 30));
+    expect(clockShowings(at(21, 31), 15, new Set(), null, []).nextAt).toBe(at(21, 45));
   });
 });

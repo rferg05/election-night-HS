@@ -1,7 +1,7 @@
 {
   "id": "election-night",
   "name": "Election Night",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "A full-screen board of live results for the 3 November 2026 House and Senate races, laid out like a broadcast board: party gains and seat counts toward a majority, a map of calls and flips, the next poll closing, a race desk that pages through every Senate race and the competitive House seats with who's likely to win as votes come in, a live feed of calls and election headlines from the last half hour, and the Chicago Board of Education president and District 6A.",
   "author": "Ryan",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "celebrateTimes": 3,
     "celebrateEvery": 3,
     "celebrateControl": true,
-    "controlEvery": 10
+    "replayEvery": "10"
   },
   "defaultSize": {
     "w": 1920,
@@ -117,14 +117,14 @@
       "celebrateFlips": {
         "type": "boolean",
         "title": "Celebrate Democratic flips",
-        "description": "When Democrats take a seat the Republicans held: the banner turns from red to blue, then the confetti and fireworks start. Works on its own with the setting above turned off.",
+        "description": "When Democrats take a seat the Republicans held: the banner turns from red to blue, then the confetti and fireworks start. Plays when it’s called; after that, the last three flips replay on the clock. Works on its own with the setting above turned off.",
         "ui:widget": "toggle",
         "ui:group": "Celebration"
       },
       "celebrateTimes": {
         "type": "number",
-        "title": "Play each celebration",
-        "description": "How many times each celebration plays: the first when the race is called, the rest after the gap below.",
+        "title": "Play each win",
+        "description": "How many times each Democratic win plays: the first when the race is called, the rest after the gap below. Flips replay on the clock instead.",
         "minimum": 1,
         "maximum": 5,
         "ui:widget": "slider",
@@ -133,7 +133,7 @@
       },
       "celebrateEvery": {
         "type": "number",
-        "title": "Replay every (minutes)",
+        "title": "Replay wins every (minutes)",
         "minimum": 1,
         "maximum": 15,
         "ui:widget": "slider",
@@ -143,17 +143,31 @@
       "celebrateControl": {
         "type": "boolean",
         "title": "Celebrate Democratic control",
-        "description": "“Democrats win the Senate” or “…the House” once enough seats are called: 51 in the Senate (the vice president breaks ties for the GOP), 218 in the House. Plays when it happens, then on repeat.",
+        "description": "“Democrats win the Senate” or “…the House” once enough seats are called: 51 in the Senate (the vice president breaks ties for the GOP), 218 in the House. Plays when it happens, then on the clock.",
         "ui:widget": "toggle",
         "ui:group": "Celebration"
       },
-      "controlEvery": {
-        "type": "number",
-        "title": "Replay control every (minutes)",
-        "minimum": 1,
-        "maximum": 60,
-        "ui:widget": "slider",
-        "ui:step": 1,
+      "replayEvery": {
+        "type": "string",
+        "title": "Replay flips and control",
+        "description": "After its first showing, “Democrats win the Senate/House” and the last three Democratic flips play again on the clock: every 10 minutes means :00, :10, :20 and so on.",
+        "enum": [
+          "5",
+          "10",
+          "15",
+          "20",
+          "30",
+          "60"
+        ],
+        "enumLabels": [
+          "Every 5 minutes",
+          "Every 10 minutes",
+          "Every 15 minutes",
+          "Every 20 minutes",
+          "Every 30 minutes",
+          "Every hour"
+        ],
+        "ui:widget": "select",
         "ui:group": "Celebration"
       },
       "schoolBoard": {

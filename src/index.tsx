@@ -972,15 +972,25 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
   const senateWon = !!data.senate && senateT.seats.won.D >= MAJORITY.senate;
   const houseWon = !!data.house && houseT.seats.won.D >= MAJORITY.house;
   useEffect(() => trackControl({ senate: senateWon, house: houseWon }), [senateWon, houseWon]);
+  // Every Democratic flip called so far, for the replays on the clock.
+  const flips = useMemo((): FlipSeen[] => [...senate, ...house]
+    .filter((s) => s.pr.status === 'called' && s.pr.leader?.party === 'D' && holderOf(s) === 'R')
+    .map((s) => ({
+      id: `${s.chamber}:${s.race.key}`,
+      at: data.calls?.[`${s.chamber}:${s.race.key}`]?.at ?? 0,
+      win: { title: raceTitle(s.race, s.chamber), name: s.pr.leader!.name, gain: true, fromR: true, senate: s.chamber === 'senate' },
+    })), [senate, house, data.calls]);
   const now = Date.now();
-  const ctrl = cfg.celebrateControl ? controlShowing(data.control, data.played, now, cfg.controlEvery) : {};
+  const clock = clockShowings(now, cfg.replayEvery, data.played, cfg.celebrateControl ? data.control : null, cfg.celebrateFlips ? flips : []);
   const wins = showingsOf(data.celebrations, data.played, now, cfg);
-  // Control comes first; the wins wait their turn.
-  const due = ctrl.due ? null : wins.due;
-  const celebration: Celebration | undefined = ctrl.due
-    ? { id: ctrl.due.at, wins: [], flip: false, control: ctrl.due.chambers, seats: { senate: senateT.seats.won.D, house: houseT.seats.won.D } }
+  // Control and the flips on the clock come first; the wins wait their turn.
+  const ctrl = clock.due;
+  const due = ctrl ? null : wins.due;
+  const celebration: Celebration | undefined = ctrl?.control
+    ? { id: ctrl.at, wins: [], flip: false, control: ctrl.control, seats: { senate: senateT.seats.won.D, house: houseT.seats.won.D } }
+    : ctrl?.win ? { id: ctrl.at + ctrl.n, wins: [ctrl.win], flip: true }
     : due ? { ...due.c, id: due.at } : undefined;
-  const nextAt = Math.min(ctrl.nextAt ?? Infinity, wins.nextAt ?? Infinity);
+  const nextAt = Math.min(clock.nextAt, wins.nextAt ?? Infinity);
   const [, setDone] = useState(0);
   // Come back for the next showing, however quiet the count is by then.
   useEffect(() => {
@@ -989,13 +999,13 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
     return () => clearTimeout(t);
   }, [nextAt]);
   const finish = useCallback(() => {
-    if (ctrl.due) store.played.add(ctrl.due.key);
+    if (ctrl) store.played.add(ctrl.key);
     else if (due) store.played.add(due.key);
     // A celebration with every showing behind it is done with.
     const end = (cfg.celebrateTimes - 1) * gap + late;
     store.celebrations = store.celebrations.filter((c) => Date.now() - c.id < end);
     setDone((n) => n + 1);
-  }, [ctrl.due?.key, due?.key, cfg.celebrateTimes, gap, late]);
+  }, [ctrl?.key, due?.key, cfg.celebrateTimes, gap, late]);
 
   const view = cfg.map === 'rotate' ? (mapStep % 2 === 0 ? 'senate' : 'house') : cfg.map;
   const portrait = box.h > box.w * 1.05;
@@ -1070,9 +1080,9 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
   );
 }
 
-/** Which showing of which celebration is due now, and when the next one
+/** Which showing of which win celebration is due now, and when the next one
  *  is: each plays `celebrateTimes` times, `celebrateEvery` minutes apart,
- *  the first as the wins come in. A showing more than 3 minutes late (the
+ *  the first as the wins come in, flips in the first only. A showing more than 3 minutes late (the
  *  module was off screen) is skipped. Which wins it shows, and whether as a
  *  flip, is up to the settings. */
 export function showingsOf(
@@ -1084,13 +1094,14 @@ export function showingsOf(
   const gap = cfg.celebrateEvery * 60_000;
   const late = Math.min(3 * 60_000, gap);
   const showings = celebrations
-    .map((c): Celebration => {
-      const wins = cfg.celebrate ? c.wins : cfg.celebrateFlips ? c.wins.filter((w) => w.fromR) : [];
-      return { ...c, wins, flip: cfg.celebrateFlips && wins.some((w) => w.fromR) };
-    })
-    .filter((c) => c.wins.length > 0)
-    .flatMap((c) => Array.from({ length: cfg.celebrateTimes }, (_, n) => ({ c, key: `${c.id}:${n}`, at: c.id + n * gap })))
-    .filter((s) => !played.has(s.key))
+    .flatMap((c) => Array.from({ length: cfg.celebrateTimes }, (_, n) => {
+      // Flips repeat on the clock instead (clockShowings): only a batch's
+      // first showing has them.
+      const shown = c.wins.filter((w) => (w.fromR ? n === 0 && cfg.celebrateFlips : cfg.celebrate));
+      const one: Celebration = { ...c, wins: shown, flip: cfg.celebrateFlips && shown.some((w) => w.fromR) };
+      return { c: one, key: `${c.id}:${n}`, at: c.id + n * gap };
+    }))
+    .filter((s) => s.c.wins.length > 0 && !played.has(s.key))
     .sort((a, b) => a.at - b.at);
   return {
     due: showings.find((s) => s.at <= now && now - s.at < late),
@@ -1098,25 +1109,52 @@ export function showingsOf(
   };
 }
 
-/** The control celebration due now, and when the next one is: from the last
- *  chamber won, every `everyMinutes`, for the rest of the night. A showing
- *  more than 3 minutes late (the module was off screen) is skipped. */
-export function controlShowing(
-  control: Partial<Record<Body, number>> | null,
-  played: Set<string>,
+/** A Democratic flip, with when this module saw it called (0: before it first ran). */
+export interface FlipSeen {
+  id: string;
+  at: number;
+  win: Win;
+}
+
+export interface ClockShowing {
+  key: string;
+  at: number;
+  /** Its place in the round, to tell the showings of one tick apart. */
+  n: number;
+  control?: Body[];
+  win?: Win;
+}
+
+/** A showing more than this late (the module was off screen) is skipped. */
+const LATE_MS = 3 * 60_000;
+
+/** The flip and control celebrations due now, and when to look again. Control
+ *  shows as soon as it's won. After that, both repeat on the clock, every
+ *  `everyMinutes` on the hour (:00, :10, :20 … for 10): control first, if won
+ *  at least 3 minutes before, then the last three flips, oldest first. */
+export function clockShowings(
   now: number,
   everyMinutes: number,
-): { due?: { key: string; at: number; chambers: Body[] }; nextAt?: number } {
+  played: Set<string>,
+  control: Partial<Record<Body, number>> | null,
+  flips: FlipSeen[],
+): { due?: ClockShowing; nextAt: number } {
   const chambers = (['senate', 'house'] as const).filter((ch) => control?.[ch]);
-  if (!chambers.length) return {};
-  // A second chamber won starts the round again, so both show at once.
-  const from = Math.max(...chambers.map((ch) => control![ch]!));
-  const gap = everyMinutes * 60_000;
-  const n = Math.max(0, Math.floor((now - from) / gap));
-  const at = from + n * gap;
-  const key = `control:${from}:${n}`;
-  const fresh = now >= at && now - at < Math.min(3 * 60_000, gap) && !played.has(key);
-  return { due: fresh ? { key, at, chambers: [...chambers] } : undefined, nextAt: from + (n + 1) * gap };
+  // A second chamber won makes it news again, with both.
+  const won = chambers.length ? Math.max(...chambers.map((ch) => control![ch]!)) : 0;
+  const d = new Date(now);
+  const into = ((d.getMinutes() % everyMinutes) * 60 + d.getSeconds()) * 1000 + d.getMilliseconds();
+  const tick = now - into;
+  const nextAt = tick + everyMinutes * 60_000;
+
+  const round: ClockShowing[] = [];
+  if (won && now - won < LATE_MS) round.push({ key: `control:${won}`, at: won, n: 0, control: [...chambers] });
+  if (into < LATE_MS) {
+    if (won && won + LATE_MS <= tick) round.push({ key: `clock:${tick}:control`, at: tick, n: 0, control: [...chambers] });
+    const last = flips.filter((f) => f.at <= tick).sort((a, b) => a.at - b.at).slice(-3);
+    last.forEach((f, i) => round.push({ key: `clock:${tick}:flip:${f.id}`, at: tick, n: i + 1, win: f.win }));
+  }
+  return { due: round.find((r) => !played.has(r.key)), nextAt };
 }
 
 /** Starts a control celebration as if Democrats had just won these chambers:
