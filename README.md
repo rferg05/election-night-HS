@@ -2,6 +2,8 @@
 
 Home Screens module: a full-screen board of live results for the 3 November 2026 midterms, made to read from across the room. It's added at 1920 × 1080 with square corners, to fill the screen; it scales to any size, and switches to a stacked layout on a portrait screen.
 
+Fonts: Barlow Condensed, Source Sans 3 and JetBrains Mono from Google Fonts. Where those can't load, as on the Pi's display page, the host's own Bebas, Inter and JetBrains Mono stand in, then DejaVu. The stacks never use `system-ui` or `ui-monospace`: on Raspberry Pi OS either can resolve to the color emoji font, which has digits and spaces but no letters, spreading every number and gap far apart.
+
 Text sizes come from the module's size: the root is 26 px on a 1920 × 1080 module (21 px on a 1080 × 1920 portrait one) and scales with it, so the smallest text, such as a race's vote shares or a feed item's time, is about 20 px. *Text size* in the settings, and the Style panel's Text size, scale it from there. The race list and the live feed show only as many rows as fit at that size, so larger text means fewer at a time.
 
 ## What it shows

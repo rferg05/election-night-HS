@@ -17,9 +17,14 @@ export const CSS = `
   --bg:${COLOR.bg};--surface:${COLOR.surface};--surface-2:${COLOR.surface2};--ink:${COLOR.ink};--muted:${COLOR.muted};--line:${COLOR.line};
   --dem:${COLOR.dem};--dem-soft:${COLOR.demSoft};--rep:${COLOR.rep};--rep-soft:${COLOR.repSoft};--ind:${COLOR.ind};--ind-soft:${COLOR.indSoft};
   --live:${COLOR.live};--live-soft:${COLOR.liveSoft};--ok:${COLOR.ok};
-  --f-display:"Barlow Condensed","Arial Narrow","Roboto Condensed",Arial,sans-serif;
-  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
-  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  /* The board's own fonts come from Google Fonts. Where those can't load
+     (the Pi's display page), the host's built-in fonts stand in, then fonts
+     every Pi has. Never system-ui or ui-monospace: on a Pi either can resolve
+     to the color emoji font, which has digits and spaces but no letters, so
+     every number and gap comes out several times too wide. */
+  --f-display:"Barlow Condensed",var(--font-bebas,"Arial Narrow"),"DejaVu Sans Condensed","Liberation Sans Narrow",Arial,sans-serif;
+  --f-body:"Source Sans 3",var(--font-inter,"Segoe UI"),"DejaVu Sans","Liberation Sans",Arial,sans-serif;
+  --f-mono:"JetBrains Mono",var(--font-jetbrains,Consolas),"DejaVu Sans Mono","Liberation Mono",monospace;
   position:absolute;inset:0;box-sizing:border-box;padding:.9em 1em;overflow:hidden;
   display:flex;flex-direction:column;gap:.75em;
   color:var(--ink);font-family:var(--f-body);line-height:1.3;text-shadow:none;
@@ -183,13 +188,13 @@ export const CSS = `
 .en26 footer span{overflow:hidden;text-overflow:ellipsis}
 .en26 .notice{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.4em}
 .en26 .notice b{font-family:var(--f-display);font-size:1.8em;text-transform:uppercase}
-.cele{position:absolute;inset:0;z-index:20;pointer-events:none;animation:en26cele linear both;font-family:"Barlow Condensed","Arial Narrow",Arial,sans-serif;color:#fff}
+.cele{position:absolute;inset:0;z-index:20;pointer-events:none;animation:en26cele linear both;font-family:var(--f-display);color:#fff}
 @keyframes en26cele{0%{background:rgba(10,24,56,0)}6%{background:rgba(10,24,56,.55)}88%{background:rgba(10,24,56,.55)}100%{background:rgba(10,24,56,0)}}
 .cele canvas{position:absolute;inset:0;width:100%;height:100%}
 .cele-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.25em;padding:.6em 1.6em .7em;border-radius:.4em;background:rgba(28,91,204,.88);box-shadow:0 0 0 .12em rgba(201,218,251,.6),0 1em 3em rgba(0,0,0,.5);text-align:center;max-width:85%;animation:en26card .7s cubic-bezier(.2,1.4,.4,1) both}
 @keyframes en26card{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 .cele-card b{font-size:4.2em;font-weight:700;line-height:1;text-transform:uppercase;letter-spacing:.02em}
-.cele-card span{font-family:"Source Sans 3","Segoe UI",sans-serif;font-size:1.5em;font-weight:600}
+.cele-card span{font-family:var(--f-body);font-size:1.5em;font-weight:600}
 .cele-card .cele-flip{font-family:inherit;font-size:1.1em;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:#fff;color:#1C5BCC;padding:.05em .6em;border-radius:.25em}
 .cele.flip{animation-name:en26celeflip}
 @keyframes en26celeflip{0%{background:rgba(60,12,10,0)}5%{background:rgba(60,12,10,.55)}12.5%{background:rgba(60,12,10,.55)}15%{background:rgba(10,24,56,.55)}90%{background:rgba(10,24,56,.55)}100%{background:rgba(10,24,56,0)}}
