@@ -1,6 +1,6 @@
 // Over the module when Democrats win a seat: blue fireworks and confetti for a
-// win, and for a seat taken from the Republicans a flip, where the banner and
-// the confetti turn from red to blue before the fireworks start. Drawn on one
+// win, and for a seat taken from the Republicans a flip, where a red banner
+// turns over to blue and only then do the confetti and fireworks start. Drawn on one
 // canvas, with modest particle counts so a Raspberry Pi keeps up.
 
 import React, { useEffect, useRef } from 'react';
@@ -24,7 +24,6 @@ export interface Celebration {
 }
 
 const BLUES = ['#6A9BF4', '#1C5BCC', '#9DB9EC', '#3D7BEA', '#C9DAFB', '#FFFFFF'];
-const REDS = ['#F2756B', '#C42F28', '#F6A9A3', '#E0463D', '#FBD3CF', '#FFFFFF'];
 const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
 /** When a flip turns blue, from the start. */
@@ -35,7 +34,7 @@ export const lengthOf = (c: Celebration) => (c.flip ? 12_000 : c.wins.some((w) =
 
 interface Spark { x: number; y: number; vx: number; vy: number; born: number; life: number; color: string; size: number }
 interface Rocket { x: number; y: number; vy: number; burstAt: number; color: string }
-interface Bit { x: number; y: number; vy: number; sway: number; phase: number; spin: number; angle: number; w: number; h: number; color: string; red: string; turn: number }
+interface Bit { x: number; y: number; vy: number; sway: number; phase: number; spin: number; angle: number; w: number; h: number; color: string; turn: number }
 
 function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duration: number, flipAt: number | null) {
   useEffect(() => {
@@ -51,7 +50,7 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
     const rockets: Rocket[] = [];
     const bits: Bit[] = Array.from({ length: flipAt == null ? 140 : 170 }, () => ({
       x: Math.random() * W,
-      // A flip's confetti is already falling when it starts, so there's red to turn.
+      // A flip's confetti appears all over the module at once when it turns.
       y: flipAt == null ? -Math.random() * H * 0.9 - 10 : Math.random() * H * 1.1 - H * 0.3,
       vy: (60 + Math.random() * 90) * scale,
       sway: (20 + Math.random() * 40) * scale,
@@ -61,10 +60,9 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
       w: (6 + Math.random() * 6) * scale,
       h: (10 + Math.random() * 8) * scale,
       color: pick(BLUES),
-      red: pick(REDS),
       turn: 0,
     }));
-    // Each piece turns a moment apart, in a wave across the module.
+    // Each piece appears a moment apart, in a wave across the module.
     for (const b of bits) b.turn = (flipAt ?? 0) + (b.x / W) * 500 + Math.random() * 150;
     let nextRocket = start + (flipAt ?? 0);
     let last = start;
@@ -147,12 +145,14 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
         b.y += b.vy * dt;
         b.angle += b.spin * dt;
         if (b.y > H + 20 && t < duration - 1500) b.y = -20;
+        // Before a flip, only the red banner: no confetti yet.
+        if (flipAt != null && t < b.turn) continue;
         const x = b.x + Math.sin(t / 600 + b.phase) * b.sway;
         ctx.save();
         ctx.translate(x, b.y);
         ctx.rotate(b.angle);
         // A flat piece turning over: its width shrinks and grows.
-        ctx.fillStyle = flipAt != null && t < b.turn ? b.red : b.color;
+        ctx.fillStyle = b.color;
         ctx.fillRect(-b.w / 2, -b.h / 2, b.w * Math.abs(Math.cos(b.angle * 1.7)) + 1, b.h);
         ctx.restore();
       }
