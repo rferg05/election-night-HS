@@ -11,7 +11,6 @@ export const API = 'https://civicapi.org/api/v2';
 /** The nationwide House and Senate races for 3 November 2026. */
 export const HOUSE_RACE = 87524;
 export const SENATE_RACE = 87528;
-export const ELECTION_DAY = '2026-11-03';
 
 /** Senate seats not up this year: 32 Democrats plus King and Sanders, who
  *  caucus with them, and 31 Republicans. Matches civicAPI's own count. */
@@ -140,18 +139,6 @@ export function readRegionRaces(body: unknown): Race[] {
   });
 }
 
-/** One race on its own (`/race/{id}`), such as a school board seat. */
-export function readRace(id: number | string, body: unknown): Race {
-  const r = body as { election_name?: string; province?: string; percent_reporting?: unknown; candidates?: unknown };
-  return {
-    key: String(id),
-    state: String(r.province ?? '').toUpperCase(),
-    name: r.election_name ?? `Race ${id}`,
-    reporting: Math.min(100, Math.max(0, num(r.percent_reporting))),
-    candidates: readCandidates(r.candidates),
-  };
-}
-
 interface ForecastEntry {
   rating?: string;
   democrat_pct?: number;
@@ -254,45 +241,49 @@ export async function loadChamber(fetcher: Fetcher, chamber: 'house' | 'senate')
 }
 
 // ── Chicago Board of Education ──────────────────────────────────────────────
+// civicAPI doesn't carry these races. The Chicago Sun-Times' results page
+// does, from AP's results feed, which it republishes as one file for the
+// whole state.
 
-export interface SearchHit {
-  id: number;
-  name: string;
-}
+export const SUNTIMES_RESULTS = 'https://graphics.suntimes.com/data-storage/elections/2026/general/results/statewide-results.json';
 
-/** Is this the Chicago Board of Education, rather than a suburban district's
- *  board? Chicago's seats are its 20 lettered subdistricts and a president. */
-export function isChicagoBoard(name: string, municipality?: unknown, district?: unknown): boolean {
-  if (!/board of education/i.test(name)) return false;
-  const where = `${name} ${municipality ?? ''} ${district ?? ''}`;
-  if (/chicago/i.test(where)) return true;
-  return /district\s+\d{1,2}[ab]\b|president/i.test(name) && /cook/i.test(where);
-}
+interface ApCandidate { first?: string; middle?: string; last?: string; voteCount?: unknown; winner?: string; incumbent?: boolean }
+interface ApUnit { eevp?: unknown; precinctsReportingPct?: unknown; candidates?: ApCandidate[] }
+interface ApRace { raceID?: string; officeName?: string; seatName?: string; eevp?: unknown; reportingUnits?: ApUnit[] }
 
-/** Finds this election's Chicago school board races. The search is slow and
- *  times out under election-night load, so callers keep what it finds. */
-export async function searchSchoolBoard(fetcher: Fetcher): Promise<SearchHit[]> {
-  const q = new URLSearchParams({
-    query: 'Board of Education',
-    province: 'IL',
-    startDate: ELECTION_DAY,
-    endDate: ELECTION_DAY,
-    limit: '100',
-  });
-  const body = await getJson(fetcher, `${API}/race/search?${q}`);
-  const races = (body as { races?: unknown[] }).races;
-  if (!Array.isArray(races)) throw new SourceError(503);
+/** The Chicago Board of Education races in an AP results file, one Race
+ *  each, named so `seatLabel` reads them ("… Subdistrict 6A", "… Board President"). */
+export function readApBoard(body: unknown): Race[] {
+  const races = (body as { races?: ApRace[] }).races;
+  if (!Array.isArray(races)) return [];
   return races
-    .map((r) => r as { id?: unknown; election_name?: unknown; municipality?: unknown; district?: unknown })
-    .filter((r) => typeof r.id === 'number' && typeof r.election_name === 'string' && isChicagoBoard(r.election_name, r.municipality, r.district))
-    .map((r) => ({ id: r.id as number, name: r.election_name as string }));
+    .filter((r) => r.officeName === 'Chicago Board of Education' && r.reportingUnits?.length)
+    .map((r) => {
+      const unit = r.reportingUnits![0];
+      // The share of the expected vote counted, or else of precincts.
+      const eevp = num(unit.eevp ?? r.eevp);
+      return {
+        key: `ap-${r.raceID}`,
+        state: 'IL',
+        name: `${r.officeName} ${r.seatName ?? ''}`.trim(),
+        reporting: Math.min(100, Math.max(0, eevp > 0 ? eevp : num(unit.precinctsReportingPct))),
+        candidates: (unit.candidates ?? [])
+          .map((c) => ({
+            name: [c.first, c.last].filter(Boolean).join(' '),
+            party: 'O' as Party,
+            votes: num(c.voteCount),
+            winner: c.winner === 'X',
+            incumbent: !!c.incumbent,
+          }))
+          .sort((a, b) => b.votes - a.votes),
+      };
+    });
 }
 
-/** A race, or, when civicAPI rolls the board up into one race, its seats. */
-export async function loadSchoolRace(fetcher: Fetcher, id: number): Promise<Race[]> {
-  const body = await getJson(fetcher, `${API}/race/${id}`);
-  const seats = readRegionRaces(body);
-  return seats.length > 0 ? seats : [readRace(id, body)];
+export async function loadChicagoBoard(fetcher: Fetcher): Promise<Race[]> {
+  const { status, body } = await fetcher({ url: SUNTIMES_RESULTS, cacheTtlMs: 30_000 });
+  if (status < 200 || status >= 300 || typeof body !== 'object' || body === null) throw new SourceError(status);
+  return readApBoard(body);
 }
 
 /** "Board of Education District 1A" → "1A"; the president's race → "President". */

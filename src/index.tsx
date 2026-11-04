@@ -4,7 +4,7 @@ import { hostFrameStyle } from './host-style';
 import { readConfig } from './config';
 import type { Config } from './config';
 import {
-  hostFetcher, loadChamber, loadSchoolRace, MAJORITY, PLUGIN_ID, searchSchoolBoard, SEATS, SENATE_HOLDOVER,
+  hostFetcher, loadChamber, loadChicagoBoard, MAJORITY, PLUGIN_ID, SEATS, SENATE_HOLDOVER,
   seatLabel, seatOrder, SourceError,
 } from './data';
 import type { Chamber, Fetcher, Party, Race } from './data';
@@ -18,8 +18,6 @@ import { COLOR, CSS, FONTS_HREF } from './styles';
 import { CelebrationOverlay } from './celebrate';
 import type { Celebration, Win } from './celebrate';
 
-/** Look for the school board races this often until they're found. */
-const SEARCH_RETRY_MS = 10 * 60_000;
 /** After a failed load, try again this soon. */
 const RETRY_MS = 30_000;
 /** New headlines this often. */
@@ -53,10 +51,8 @@ interface Store {
   house: Chamber | null;
   school: Race[];
   /** School board race ids, found by searching. */
-  foundIds: number[] | null;
-  searchedAt: number;
   /** The last search for them failed: civicAPI's search is slow under load. */
-  searchFailed: boolean;
+  schoolFailed: boolean;
   schoolLoadedAt: number;
   schoolLoading: Promise<void> | null;
   failure: string | null;
@@ -82,7 +78,7 @@ interface Store {
 }
 
 const store: Store = {
-  senate: null, house: null, school: [], foundIds: null, searchedAt: 0, searchFailed: false,
+  senate: null, house: null, school: [], schoolFailed: false,
   schoolLoadedAt: 0, schoolLoading: null, failure: null, loadedAt: 0, savedAt: 0, loading: null,
   news: [], newsLoadedAt: 0, newsLoading: null, calls: null, callsPrimed: false, leaders: {}, leads: [], wins: [], celebrations: [],
 };
@@ -134,7 +130,7 @@ function track(chamber: 'senate' | 'house', races: Race[]) {
         state: race.state,
       };
       if (primed && pr.leader.party === 'D') {
-        store.wins.push({ title: raceTitle(race, chamber), name: pr.leader.name, gain: calls[id].gain, senate: chamber === 'senate' });
+        store.wins.push({ title: raceTitle(race, chamber), name: pr.leader.name, gain: calls[id].gain, fromR: holder === 'R', senate: chamber === 'senate' });
       }
       changed = true;
     }
@@ -163,33 +159,17 @@ function track(chamber: 'senate' | 'house', races: Race[]) {
   }
 }
 
-async function loadSchool(fetcher: Fetcher, cfg: Config): Promise<void> {
-  let ids = cfg.schoolBoardIds;
-  if (ids.length === 0) {
-    if (!store.foundIds?.length && Date.now() - store.searchedAt >= SEARCH_RETRY_MS) {
-      store.searchedAt = Date.now();
-      try {
-        store.foundIds = (await searchSchoolBoard(fetcher)).map((h) => h.id);
-        store.searchFailed = false;
-        log('info', `found ${store.foundIds.length} Chicago school board races`);
-      } catch (e) {
-        store.searchFailed = true;
-        log('warn', `school board search failed: ${describe(e)}`);
-      }
-    }
-    ids = store.foundIds ?? [];
+async function loadSchool(fetcher: Fetcher): Promise<void> {
+  try {
+    const races = (await loadChicagoBoard(fetcher)).filter((r) => BOARD_SEATS.includes(seatLabel(r.name)));
+    if (races.length) store.school = races.sort((a, b) => seatOrder(seatLabel(a.name)) - seatOrder(seatLabel(b.name)));
+    if (store.schoolFailed) log('info', 'Sun-Times results are answering again');
+    store.schoolFailed = false;
+  } catch (e) {
+    // The last count stays up.
+    if (!store.schoolFailed) log('warn', `Sun-Times results: ${String(e)}`);
+    store.schoolFailed = true;
   }
-  const got = await Promise.allSettled(ids.map((id) => loadSchoolRace(fetcher, id)));
-  const races = got.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-  // A seat that failed this time keeps its last count.
-  const seen = new Set<string>();
-  const merged = [...races, ...store.school].filter((r) => {
-    const label = seatLabel(r.name);
-    if (seen.has(label)) return false;
-    seen.add(label);
-    return true;
-  });
-  store.school = merged.sort((a, b) => seatOrder(seatLabel(a.name)) - seatOrder(seatLabel(b.name)));
 }
 
 function refresh(fetcher: Fetcher, cfg: Config): Promise<void> | null {
@@ -222,7 +202,7 @@ function refresh(fetcher: Fetcher, cfg: Config): Promise<void> | null {
     // One celebration for everything a count brings in, Senate seats first.
     if (store.wins.length) {
       const wins = store.wins.sort((a, b) => Number(b.senate) - Number(a.senate) || Number(b.gain) - Number(a.gain));
-      store.celebrations = [...store.celebrations, { id: Date.now(), wins }].slice(-3);
+      store.celebrations = [...store.celebrations, { id: Date.now(), wins, flip: false }].slice(-3);
       store.wins = [];
     }
     const failed = [senate, house].find((r): r is PromiseRejectedResult => r.status === 'rejected');
@@ -236,13 +216,13 @@ function refresh(fetcher: Fetcher, cfg: Config): Promise<void> | null {
   return store.loading;
 }
 
-/** The school board on its own timer, half as often: its search can take a
- *  minute under load, and mustn't hold up the federal results. */
+/** The school board on its own timer, from its own source, so neither holds
+ *  up the other. */
 function refreshSchool(fetcher: Fetcher, cfg: Config): Promise<void> | null {
   if (!cfg.schoolBoard) return null;
-  const due = Date.now() - store.schoolLoadedAt >= cfg.refreshSeconds * 2000;
+  const due = Date.now() - store.schoolLoadedAt >= cfg.refreshSeconds * 1000;
   if (!due || store.schoolLoading) return store.schoolLoading;
-  store.schoolLoading = loadSchool(fetcher, cfg)
+  store.schoolLoading = loadSchool(fetcher)
     .catch(() => {})
     .finally(() => {
       store.schoolLoadedAt = Date.now();
@@ -443,7 +423,7 @@ function ChamberPanel({ chamber, t }: { chamber: 'senate' | 'house'; t: Tally })
     <div className="panel">
       <div className="panel-h">
         <h2>{senate ? 'Senate' : 'House'}</h2>
-        <span className="small">{t.called} of {t.total} called</span>
+        <span className="small">{t.called} of {t.total} called{won.I ? ` · ${won.I} Ind` : ''}</span>
       </div>
       <div className={`gains${showI ? ' three' : ''}`}>
         <Gain party="D" label="Dem gains" t={t} />
@@ -462,15 +442,10 @@ function ChamberPanel({ chamber, t }: { chamber: 'senate' | 'house'; t: Tally })
       </div>
       <div className="barlegend">
         <span className="D"><b>{won.D}</b> {senate ? 'Dem caucus' : 'Dem'}{aheadNote('D')}</span>
-        <span className="small">{open} to call{won.I ? ` · ${won.I} Ind` : ''}</span>
+        <span className="small">Expected {Math.round(expected.D)}–{Math.round(expected.R)}{expected.I >= 0.5 ? `–${Math.round(expected.I)}` : ''}</span>
         <span className="R">{aheadNote('R')} <b>{won.R}</b> Republican</span>
       </div>
       <div className="verdict" style={{ color: verdictColor }}>{verdict}</div>
-      <div className="small">
-        {senate ? 'Includes the 65 seats not on the ballot (34 Dem caucus, 31 GOP). ' : ''}
-        Expected: D {Math.round(expected.D)} · R {Math.round(expected.R)}
-        {expected.I >= 0.5 ? ` · Ind ${Math.round(expected.I)}` : ''}
-      </div>
     </div>
   );
 }
@@ -597,25 +572,24 @@ function MapPanel({ view, rotating, senate, house }: { view: 'senate' | 'house';
           {(rotating || view === 'senate') && <span className={view === 'senate' ? 'on' : ''}>Senate map</span>}
           {(rotating || view === 'house') && <span className={view === 'house' ? 'on' : ''}>House flips by state</span>}
         </div>
-        <div className="legend">
-          {view === 'senate' ? [
-            sw(COLOR.dem, 'Dem flip', hatch(COLOR.dem, COLOR.demHold)),
-            sw(COLOR.rep, 'GOP flip', hatch(COLOR.rep, COLOR.repHold)),
-            sw(COLOR.demHold, 'Dem hold'),
-            sw(COLOR.repHold, 'GOP hold'),
-            <span key="faint"><i style={{ background: `linear-gradient(90deg, ${COLOR.demHold}88 50%, ${COLOR.repHold}88 50%)` }} />Likely, not called</span>,
-            sw(COLOR.mapOpen, 'Not called'),
-            sw(COLOR.mapNone, 'No race'),
-          ] : [
-            sw(COLOR.dem, 'More Dem flips'),
-            sw(COLOR.rep, 'More GOP flips'),
-            <span key="faint"><i style={{ background: `linear-gradient(90deg, ${COLOR.dem}88 50%, ${COLOR.rep}88 50%)` }} />Likely, not called</span>,
-            sw(COLOR.mapOpen, 'No flips yet'),
-            sw(COLOR.mapDone, 'All called'),
-          ]}
-        </div>
       </div>
       <div className="mapbox"><UsMap view={view} senate={senate} house={house} /></div>
+      <div className="legend">
+        {view === 'senate' ? [
+          sw(COLOR.dem, 'Dem flip', hatch(COLOR.dem, COLOR.demHold)),
+          sw(COLOR.rep, 'GOP flip', hatch(COLOR.rep, COLOR.repHold)),
+          sw(COLOR.demHold, 'Dem hold'),
+          sw(COLOR.repHold, 'GOP hold'),
+          <span key="faint"><i style={{ background: `linear-gradient(90deg, ${COLOR.demHold}88 50%, ${COLOR.repHold}88 50%)` }} />Likely, not called</span>,
+          sw(COLOR.mapOpen, 'Not called'),
+        ] : [
+          sw(COLOR.dem, 'More Dem flips'),
+          sw(COLOR.rep, 'More GOP flips'),
+          <span key="faint"><i style={{ background: `linear-gradient(90deg, ${COLOR.dem}88 50%, ${COLOR.rep}88 50%)` }} />Likely, not called</span>,
+          sw(COLOR.mapOpen, 'No flips yet'),
+          sw(COLOR.mapDone, 'All called'),
+        ]}
+      </div>
     </section>
   );
 }
@@ -711,15 +685,9 @@ function Pager<T>({ groups, rowEm, gapEm, em, seconds, row, empty }: {
 const RATING_ORDER = (rating: string) =>
   /toss/i.test(rating) ? 0 : /tilt|lean/i.test(rating) ? 1 : /likely/i.test(rating) ? 2 : /safe|solid/i.test(rating) ? 4 : 3;
 
-function ratingClass(rating: string): string {
-  if (/toss/i.test(rating)) return 'TU';
-  if (/\bD\b|dem/i.test(rating)) return 'D';
-  if (/\bR\b|rep/i.test(rating)) return 'R';
-  return '';
-}
-
-const RACE_EM = 3.5;
-const FEED_EM = 4.1;
+// Row heights, in the module's em: few enough per page to read across a room.
+const RACE_EM = 3.6;
+const FEED_EM = 5.4;
 
 function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<string, SeenCall> | null }) {
   const { race, pr, chamber } = s;
@@ -731,7 +699,8 @@ function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<strin
   const flip = !!pr.leader && !!holder && pr.leader.party !== holder && (done || pr.flip);
   const close = closeAt(race.state);
   const code = chamber === 'senate' ? race.state : raceTitle(race, chamber);
-  const sub = chamber === 'senate' ? NAMES[race.state] ?? race.state : close ? `polls ${fmt.format(close)}` : '';
+  // A House district's code already says the state.
+  const sub = chamber === 'senate' ? NAMES[race.state] ?? race.state : '';
   const rating = race.prior?.rating ?? '';
 
   let note: React.ReactNode;
@@ -751,7 +720,8 @@ function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<strin
       </>
     );
   } else {
-    note = <span className="n">Held by {holder ? (holder === 'I' ? 'Ind' : holder) : '—'}{close ? ` · polls close ${fmt.format(close)}` : ''}</span>;
+    // Before any votes, the pre-election rating says what to expect.
+    note = <span className="n">{rating || `Held by ${holder ? (holder === 'I' ? 'Ind' : holder) : '—'}`}{close ? ` · polls closed ${fmt.format(close)}` : ''}</span>;
   }
 
   let result: React.ReactNode;
@@ -765,7 +735,7 @@ function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<strin
     );
   } else if (!counted || !pr.leader) {
     const open = close != null && close > Date.now();
-    result = <div className="res"><span className="at">{open ? `Polls ${fmt.format(close!)}` : 'Awaiting votes'}</span></div>;
+    result = <div className="res"><span className="at">{open ? `Polls ${fmt.format(close!)}` : 'No votes yet'}</span></div>;
   } else if (pr.status === 'tossup') {
     result = <div className="res"><span className="e TU">Too close</span><span className="at">{pr.leader.party} {pct(pr.chance)}% to win</span></div>;
   } else {
@@ -781,13 +751,14 @@ function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<strin
   const party = (p: Party) => (p === 'O' ? 'I' : p);
   return (
     <div key={`${chamber}-${race.key}`} className={`race h${holder ?? ''}${flip ? ' flip' : ''}`} style={{ height: `${RACE_EM}em` }}>
-      <div className="code">{code}<small>{sub}</small></div>
+      <div className="code">{code}{sub && <small>{sub}</small>}</div>
       <div className="who">
         <div className="m">
           {shown.length === 0 ? <span className="small">No candidates listed</span> : shown.map((c, i) => (
             <React.Fragment key={c.name}>
               {i > 0 && <span className="small"> vs </span>}
-              <span className={`p${party(c.party)}`}>{lastName(c.name)} ({c.party})</span>
+              {/* Names are in their party's color; only others say which. */}
+              <span className={`p${party(c.party)}`}>{lastName(c.name)}{c.party === 'D' || c.party === 'R' ? '' : ` (${c.party})`}</span>
               {c.incumbent && <span className="small"> inc.</span>}
               {c.winner && ' ✓'}
             </React.Fragment>
@@ -795,7 +766,6 @@ function RaceRow({ s, tz, calls }: { s: Scored; tz?: string; calls: Record<strin
         </div>
         {note}
       </div>
-      {rating ? <span className={`pill ${ratingClass(rating)}`}>{rating}</span> : <span />}
       {result}
     </div>
   );
@@ -814,11 +784,18 @@ function RaceDesk({ senate, house, tz, em, seconds, calls }: { senate: Scored[];
       || (closeAt(a.race.state) ?? 0) - (closeAt(b.race.state) ?? 0)
       || RATING_ORDER(a.race.prior?.rating ?? '') - RATING_ORDER(b.race.prior?.rating ?? '')
       || a.race.key.localeCompare(b.race.key, undefined, { numeric: true });
-    const h = house.filter((s) => watched(s.race, s.pr, 'house'));
+    // Fewer rows to a page makes for a long round, so it leaves out what
+    // isn't news: races whose polls haven't closed (the countdown has those),
+    // and House calls more than an hour old.
+    const now = Date.now();
+    const pending = (s: Scored) => s.pr.totalVotes === 0 && phase(s) === 2 && (closeAt(s.race.state) ?? 0) > now;
+    const stale = (s: Scored) => phase(s) === 1 && now - calledAt(s) > 60 * 60_000;
+    const sen = senate.filter((s) => !pending(s));
+    const h = house.filter((s) => watched(s.race, s.pr, 'house') && !pending(s) && !stale(s));
     return [
-      { label: 'Senate races', items: [...senate].sort(order) },
+      { label: 'Senate races', items: sen.sort(order) },
       { label: 'House · competitive seats', items: h.sort(order) },
-    ];
+    ].filter((g) => g.items.length);
   }, [senate, house, calls]);
   return (
     <Pager
@@ -828,7 +805,7 @@ function RaceDesk({ senate, house, tz, em, seconds, calls }: { senate: Scored[];
       em={em}
       seconds={seconds}
       row={(s) => <RaceRow key={`${s.chamber}-${s.race.key}`} s={s} tz={tz} calls={calls} />}
-      empty={<div className="empty">No races to show.</div>}
+      empty={<div className="empty">No polls have closed yet.</div>}
     />
   );
 }
@@ -844,11 +821,8 @@ function FeedRow({ item, tz, now }: { item: FeedItem; tz?: string; now: number }
   const st = item.kind === 'news' ? <span className="tag ST">{item.state ?? 'US'}</span> : null;
   return (
     <div className={`item${now - item.at < FRESH_MS ? ' fresh' : ''}`} style={{ height: `${FEED_EM}em` }}>
-      <span className="tm">{timeFmt(tz).format(item.at)}</span>
-      <div className="tx">
-        <div className="body">{tag}{st}<b>{item.title}</b>{item.text ? ` ${item.text}` : ''}</div>
-        {item.source && <span className="srcline">{item.source}</span>}
-      </div>
+      <div className="head">{tag}{st}<span className="tm">{timeFmt(tz).format(item.at)}{item.source ? ` · ${item.source}` : ''}</span></div>
+      <div className="body"><b>{item.title}</b>{item.text ? ` ${item.text}` : ''}</div>
     </div>
   );
 }
@@ -876,48 +850,52 @@ function LiveFeed({ items, minutes, tz, em, seconds }: { items: FeedItem[]; minu
 
 // ── Chicago Board of Education ──────────────────────────────────────────────
 
-function SchoolBoard({ races, searching }: { races: Race[]; searching: boolean }) {
-  const scored = races.map((race) => ({ race, pr: project(race), label: seatLabel(race.name) }));
-  const president = scored.find((s) => s.label === 'President');
-  const seats = scored.filter((s) => s !== president);
-  const reporting = races.length ? Math.round(races.reduce((m, r) => Math.max(m, r.reporting), 0)) : 0;
-  const share = (pr: Projection, name: string) => Math.round((pr.share[name] ?? 0) * 100);
+/** The Chicago races shown: the board president and one district seat. */
+export const BOARD_SEATS = ['President', '6A'];
+
+function BoardRace({ label, race }: { label: string; race?: Race }) {
+  const pr = race ? project(race) : null;
+  const counted = !!pr && pr.totalVotes > 0;
+  const shown = pr ? [pr.leader, pr.runnerUp].filter((c): c is NonNullable<typeof c> => !!c).sort((a, b) => b.votes - a.votes) : [];
+  const share = (name: string) => (pr?.share[name] ?? 0) * 100;
+  const called = pr?.status === 'called';
+  return (
+    <div className={`brace${called ? ' done' : ''}`}>
+      <div className="bhead">
+        <b>{label === 'President' ? 'Board president' : `District ${label}`}</b>
+        <span className="small">{!race ? '—' : called ? 'Called' : counted ? `${Math.round(race.reporting)}% in` : 'No votes yet'}</span>
+      </div>
+      {shown.length > 0 && (
+        <div className="bcands">
+          {shown.map((c) => (
+            <div key={c.name} className="bcand">
+              <span className="bn">{lastName(c.name)}{c.winner ? ' ✓' : ''}</span>
+              {counted && <span className="bp">{share(c.name).toFixed(1)}%</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {counted && shown.length >= 2 && (
+        <div className="h2hbar board">
+          <span style={{ width: `${share(shown[0].name)}%` }} />
+          <span style={{ flex: 1 }} />
+          <span className="second" style={{ width: `${share(shown[1].name)}%` }} />
+          <i className="mid" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchoolBoard({ races, failed }: { races: Race[]; failed: boolean }) {
+  const by = new Map(races.map((r) => [seatLabel(r.name), r]));
   return (
     <section className="panel boardpanel">
       <div className="panel-h">
-        <h2 style={{ fontSize: '1.2em' }}>Chicago Board of Ed</h2>
-        <span className="small">{races.length ? `${reporting}% in` : ''}</span>
+        <h2 style={{ fontSize: '1.15em' }}>Chicago Board of Ed</h2>
+        {races.length === 0 && <span className="small">{failed ? 'Sun-Times not answering' : 'Loading…'}</span>}
       </div>
-      {races.length === 0 && (
-        <div className="small">
-          {searching ? 'Looking for the races…' : 'Not found on civicAPI yet; trying again every 10 minutes. Race IDs can also be added in this module’s settings.'}
-        </div>
-      )}
-      {president && (
-        <div className="who" style={{ fontSize: '.9em' }}>
-          <div className="m">
-            <span className="small">President · </span>
-            {president.pr.leader && president.pr.totalVotes > 0
-              ? <>{president.pr.leader.name} {share(president.pr, president.pr.leader.name)}%{president.pr.status === 'called' ? ' ✓' : ''}{president.pr.runnerUp ? <span className="small"> · {lastName(president.pr.runnerUp.name)} {share(president.pr, president.pr.runnerUp.name)}%</span> : null}</>
-              : <span className="small">No votes yet</span>}
-          </div>
-        </div>
-      )}
-      {seats.length > 0 && (
-        <div className="seats">
-          {seats.map((s) => {
-            const lead = s.pr.leader;
-            const counted = !!lead && s.pr.totalVotes > 0;
-            return (
-              <div key={s.race.key + s.label} className={`seat${s.pr.status === 'called' ? ' done' : ''}`}>
-                <b>{s.label}</b>
-                <span>{counted ? lastName(lead!.name) : '—'}</span>
-                {counted && <i>{s.pr.status === 'called' ? '✓' : `${share(s.pr, lead!.name)}%`}</i>}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {BOARD_SEATS.map((label) => <BoardRace key={label} label={label} race={by.get(label)} />)}
     </section>
   );
 }
@@ -957,8 +935,15 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.loadedAt, data.newsLoadedAt, minute, cfg.feedMinutes, cfg.news, senateStates]);
 
-  // A celebration is only worth showing while it's news.
-  const celebration = cfg.celebrate ? data.celebrations.find((c) => Date.now() - c.id < 3 * 60_000) : undefined;
+  // A celebration is only worth showing while it's news. Which wins it
+  // shows, and whether as a flip, is up to the settings.
+  const celebration = data.celebrations
+    .filter((c) => Date.now() - c.id < 3 * 60_000)
+    .map((c): Celebration => {
+      const wins = cfg.celebrate ? c.wins : cfg.celebrateFlips ? c.wins.filter((w) => w.fromR) : [];
+      return { ...c, wins, flip: cfg.celebrateFlips && wins.some((w) => w.fromR) };
+    })
+    .find((c) => c.wins.length > 0);
   const [, setDone] = useState(0);
   const finish = useCallback(() => {
     store.celebrations = store.celebrations.filter((c) => c.id > (celebration?.id ?? 0));
@@ -967,9 +952,12 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
 
   const view = cfg.map === 'rotate' ? (mapStep % 2 === 0 ? 'senate' : 'house') : cfg.map;
   const portrait = box.h > box.w * 1.05;
-  // Everything is sized in em from the module's size: a 1600 × 900 module
-  // reads at 16 px, and the layout scales with it.
-  const unit = Math.max(8, Math.min(box.w / (portrait ? 1080 : 1600), box.h / (portrait ? 1920 : 900)) * 16 * (style.fontSize > 0 ? style.fontSize / 16 : 1));
+  // Everything is sized in em from the module's size, to read from across the
+  // room: the root is 26 px on a full 1920 × 1080 screen (21 px on a portrait
+  // one) and scales with it. Text size, and the Style panel's, scale it from
+  // there.
+  const fit = portrait ? Math.min(box.w / 1080, box.h / 1920) * 21 : Math.min(box.w / 1920, box.h / 1080) * 26;
+  const unit = Math.max(8, fit * cfg.textScale * (style.fontSize > 0 ? style.fontSize / 16 : 1));
   const radius = Math.max(0, (Number(style.borderRadius) || 0) - (Number(style.padding) || 0));
   const updated = data.savedAt ? timeFmt(tz).format(data.savedAt) : data.loadedAt ? timeFmt(tz).format(data.loadedAt) : '';
 
@@ -985,7 +973,6 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
             <header>
               <div>
                 <h1>Election Night 2026</h1>
-                <div className="sub">Tuesday, November 3 · Senate and House race desk</div>
               </div>
               <div className="hdr-right">
                 <span className={`chip ${data.failure || data.savedAt ? 'warn' : data.loadedAt ? 'live' : ''}`}>
@@ -1019,12 +1006,12 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
                   </div>
                   <aside className="side">
                     <LiveFeed items={feed} minutes={cfg.feedMinutes} tz={tz} em={unit} seconds={cfg.pageSeconds} />
-                    {cfg.schoolBoard && <SchoolBoard races={data.school} searching={!data.foundIds && !data.searchFailed && cfg.schoolBoardIds.length === 0} />}
+                    {cfg.schoolBoard && <SchoolBoard races={data.school} failed={data.schoolFailed} />}
                   </aside>
                 </div>
                 <footer>
-                  <span>Results: civicAPI{cfg.news ? ' · Headlines: AP, CBS News, NYT, PBS, NPR' : ''} · Map: us-atlas · A gain is a seat won from the party that held it.</span>
-                  <span>Only &ldquo;called&rdquo; races are calls. Likely / Leaning / Projected are this module&rsquo;s estimate.</span>
+                  <span>Results: civicAPI{cfg.news ? ' · Headlines: AP, CBS, NYT, PBS, NPR' : ''}</span>
+                  <span>Only &ldquo;called&rdquo; races are calls. Likely and Leaning are this board&rsquo;s estimate.</span>
                 </footer>
               </>
             )}
@@ -1039,6 +1026,6 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
 /** Starts a celebration as if these seats had just been called: for the
  *  preview page. */
 export function celebrateForPreview(wins: Win[]) {
-  store.celebrations = [...store.celebrations, { id: Date.now(), wins }];
+  store.celebrations = [...store.celebrations, { id: Date.now(), wins, flip: false }];
   for (const l of listeners) l();
 }

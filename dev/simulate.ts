@@ -45,26 +45,3 @@ export function simulate(url: string, body: unknown, reporting: number): unknown
   return b;
 }
 
-/** Stand-ins for the Chicago school board races, until civicAPI's search can
- *  find the real ones. */
-export function fakeSchoolBoard(): Json {
-  const names = ['Ana Ruiz', 'Marcus Bell', 'Grace Kim', 'Luis Ortega', 'Dana Price', 'Owen Walsh', 'Nia Carter', 'Sam Patel'];
-  const regions: Json = {
-    president: { name: 'President of the Board of Education', percent_reporting: 0, candidates: [
-      { name: 'Jessica Biggs', party: 'Nonpartisan', votes: 0 },
-      { name: 'Victor P. Henderson', party: 'Nonpartisan', votes: 0 },
-      { name: 'Hilario Dominguez', party: 'Nonpartisan', votes: 0 },
-    ] },
-  };
-  for (let d = 1; d <= 10; d++) {
-    for (const s of ['A', 'B']) {
-      const r = rand(`${d}${s}`);
-      const pick = () => names[Math.floor(r() * names.length)];
-      regions[`${d}${s}`] = { name: `Board of Education District ${d}${s}`, percent_reporting: 0, candidates: [
-        { name: pick(), party: 'Nonpartisan', votes: 0 },
-        { name: `${pick()} Jr.`, party: 'Nonpartisan', votes: 0 },
-      ] };
-    }
-  }
-  return { election_name: 'Chicago Board of Education', region_results: regions };
-}

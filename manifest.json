@@ -1,8 +1,8 @@
 {
   "id": "election-night",
   "name": "Election Night",
-  "version": "1.2.1",
-  "description": "A full-screen board of live results for the 3 November 2026 House and Senate races, laid out like a broadcast board: party gains and seat counts toward a majority, a map of calls and flips, the next poll closing, a race desk that pages through every Senate race and the competitive House seats with who's likely to win as votes come in, a live feed of calls and election headlines from the last half hour, and the Chicago Board of Education.",
+  "version": "1.4.0",
+  "description": "A full-screen board of live results for the 3 November 2026 House and Senate races, laid out like a broadcast board: party gains and seat counts toward a majority, a map of calls and flips, the next poll closing, a race desk that pages through every Senate race and the competitive House seats with who's likely to win as votes come in, a live feed of calls and election headlines from the last half hour, and the Chicago Board of Education president and District 6A.",
   "author": "Ryan",
   "license": "MIT",
   "minAppVersion": "1.13.0",
@@ -17,8 +17,9 @@
     "news": true,
     "feedMinutes": 30,
     "schoolBoard": true,
-    "schoolBoardIds": "",
-    "celebrate": true
+    "celebrate": true,
+    "textScale": 1,
+    "celebrateFlips": true
   },
   "defaultSize": {
     "w": 1920,
@@ -33,6 +34,16 @@
   "configSchema": {
     "type": "object",
     "properties": {
+      "textScale": {
+        "type": "number",
+        "title": "Text size",
+        "description": "Text already grows with the module, sized to read across a room on a full 1080p screen. This makes everything larger or smaller from there; larger shows fewer races and headlines at a time.",
+        "minimum": 0.6,
+        "maximum": 1.6,
+        "ui:widget": "slider",
+        "ui:step": 0.05,
+        "ui:group": "Display"
+      },
       "map": {
         "type": "string",
         "title": "Map shows",
@@ -94,8 +105,15 @@
       },
       "celebrate": {
         "type": "boolean",
-        "title": "Celebrate Democratic wins",
+        "title": "Celebrate every Democratic win",
         "description": "Blue fireworks and confetti over the module when a race is called for a Democrat. Wins called in the same update share one celebration.",
+        "ui:widget": "toggle",
+        "ui:group": "Celebration"
+      },
+      "celebrateFlips": {
+        "type": "boolean",
+        "title": "Celebrate Democratic flips",
+        "description": "When Democrats take a seat the Republicans held: the banner and confetti turn from red to blue, then the fireworks. Works on its own with the setting above turned off.",
         "ui:widget": "toggle",
         "ui:group": "Celebration"
       },
@@ -103,13 +121,8 @@
         "type": "boolean",
         "title": "Chicago Board of Education",
         "ui:widget": "toggle",
-        "ui:group": "Chicago"
-      },
-      "schoolBoardIds": {
-        "type": "string",
-        "title": "School board race IDs",
-        "description": "Leave empty to find them automatically. If they aren't found, paste civicAPI race IDs here, separated by commas (the number at the end of a race's civicapi.org link).",
-        "ui:group": "Chicago"
+        "ui:group": "Chicago",
+        "description": "The board president’s race and District 6A, from the Chicago Sun-Times’ AP results."
       }
     }
   },
@@ -119,7 +132,8 @@
     "www.cbsnews.com",
     "rss.nytimes.com",
     "www.pbs.org",
-    "feeds.npr.org"
+    "feeds.npr.org",
+    "graphics.suntimes.com"
   ],
   "exports": {
     "component": "default"

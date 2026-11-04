@@ -10,12 +10,13 @@ export interface Config {
   news: boolean;
   /** The live feed shows this much of the night, in minutes. */
   feedMinutes: number;
+  /** Scales all the text: 1 is sized for a full screen read across a room. */
+  textScale: number;
   /** Blue fireworks and confetti when Democrats win a seat. */
   celebrate: boolean;
+  /** Seats taken from the Republicans get a flip: red turning blue. */
+  celebrateFlips: boolean;
   schoolBoard: boolean;
-  /** civicAPI race ids for the school board, for when the search can't find
-   *  them. Empty: found by searching. */
-  schoolBoardIds: number[];
 }
 
 const num = (v: unknown, fallback: number, min: number, max: number): number => {
@@ -26,14 +27,6 @@ const num = (v: unknown, fallback: number, min: number, max: number): number => 
 const bool = (v: unknown, fallback: boolean): boolean =>
   typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : fallback;
 
-export function readIds(v: unknown): number[] {
-  return String(v ?? '')
-    .split(/[^0-9]+/)
-    .filter(Boolean)
-    .map(Number)
-    .filter((n) => Number.isSafeInteger(n) && n > 0);
-}
-
 export function readConfig(raw: Record<string, unknown>): Config {
   const map = String(raw.map);
   return {
@@ -43,8 +36,9 @@ export function readConfig(raw: Record<string, unknown>): Config {
     pageSeconds: num(raw.pageSeconds, 10, 4, 60),
     news: bool(raw.news, true),
     feedMinutes: num(raw.feedMinutes, 30, 5, 240),
+    textScale: num(raw.textScale, 1, 0.6, 1.6),
     celebrate: bool(raw.celebrate, true),
+    celebrateFlips: bool(raw.celebrateFlips, true),
     schoolBoard: bool(raw.schoolBoard, true),
-    schoolBoardIds: readIds(raw.schoolBoardIds),
   };
 }

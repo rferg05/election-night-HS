@@ -1,5 +1,7 @@
-// Blue fireworks and confetti over the module when Democrats win a seat.
-// Drawn on one canvas, with modest particle counts so a Raspberry Pi keeps up.
+// Over the module when Democrats win a seat: blue fireworks and confetti for a
+// win, and for a seat taken from the Republicans a flip, where the banner and
+// the confetti turn from red to blue before the fireworks start. Drawn on one
+// canvas, with modest particle counts so a Raspberry Pi keeps up.
 
 import React, { useEffect, useRef } from 'react';
 
@@ -9,25 +11,33 @@ export interface Win {
   name: string;
   /** Won from the other party. */
   gain: boolean;
+  /** Taken from a Republican seat. */
+  fromR: boolean;
   senate: boolean;
 }
 
 export interface Celebration {
   id: number;
   wins: Win[];
+  /** Show it as a flip: red turning blue. */
+  flip: boolean;
 }
 
 const BLUES = ['#6A9BF4', '#1C5BCC', '#9DB9EC', '#3D7BEA', '#C9DAFB', '#FFFFFF'];
+const REDS = ['#F2756B', '#C42F28', '#F6A9A3', '#E0463D', '#FBD3CF', '#FFFFFF'];
 const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
 
-/** How long a celebration runs: longer for a Senate seat or a flip. */
-export const lengthOf = (c: Celebration) => (c.wins.some((w) => w.senate || w.gain) ? 10_000 : 7_000);
+/** When a flip turns blue, from the start. */
+export const FLIP_AT = 1600;
+
+/** How long a celebration runs: longest for a flip, then a Senate seat. */
+export const lengthOf = (c: Celebration) => (c.flip ? 12_000 : c.wins.some((w) => w.senate || w.gain) ? 10_000 : 7_000);
 
 interface Spark { x: number; y: number; vx: number; vy: number; born: number; life: number; color: string; size: number }
 interface Rocket { x: number; y: number; vy: number; burstAt: number; color: string }
-interface Bit { x: number; y: number; vy: number; sway: number; phase: number; spin: number; angle: number; w: number; h: number; color: string }
+interface Bit { x: number; y: number; vy: number; sway: number; phase: number; spin: number; angle: number; w: number; h: number; color: string; red: string; turn: number }
 
-function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duration: number) {
+function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duration: number, flipAt: number | null) {
   useEffect(() => {
     const el = canvas.current;
     const ctx = el?.getContext('2d');
@@ -39,9 +49,10 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
     const start = performance.now();
     const sparks: Spark[] = [];
     const rockets: Rocket[] = [];
-    const bits: Bit[] = Array.from({ length: 140 }, () => ({
+    const bits: Bit[] = Array.from({ length: flipAt == null ? 140 : 170 }, () => ({
       x: Math.random() * W,
-      y: -Math.random() * H * 0.9 - 10,
+      // A flip's confetti is already falling when it starts, so there's red to turn.
+      y: flipAt == null ? -Math.random() * H * 0.9 - 10 : Math.random() * H * 1.1 - H * 0.3,
       vy: (60 + Math.random() * 90) * scale,
       sway: (20 + Math.random() * 40) * scale,
       phase: Math.random() * Math.PI * 2,
@@ -50,21 +61,26 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
       w: (6 + Math.random() * 6) * scale,
       h: (10 + Math.random() * 8) * scale,
       color: pick(BLUES),
+      red: pick(REDS),
+      turn: 0,
     }));
-    let nextRocket = start;
+    // Each piece turns a moment apart, in a wave across the module.
+    for (const b of bits) b.turn = (flipAt ?? 0) + (b.x / W) * 500 + Math.random() * 150;
+    let nextRocket = start + (flipAt ?? 0);
     let last = start;
     let frame = 0;
 
-    const burst = (x: number, y: number, color: string, now: number) => {
-      const n = 56;
+    const burst = (x: number, y: number, color: string, now: number, big: boolean) => {
+      const n = big ? 80 : 56;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + Math.random() * 0.2;
-        const v = (180 + Math.random() * 200) * scale;
+        const v = (180 + Math.random() * (big ? 320 : 200)) * scale;
         sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, born: now, life: 1200 + Math.random() * 800, color: Math.random() < 0.25 ? '#FFFFFF' : color, size: (2.5 + Math.random() * 2.5) * scale });
       }
       // The flash of the burst.
-      sparks.push({ x, y, vx: 0, vy: 0, born: now, life: 260, color: '#FFFFFF', size: 26 * scale });
+      sparks.push({ x, y, vx: 0, vy: 0, born: now, life: 260, color: '#FFFFFF', size: (big ? 40 : 26) * scale });
     };
+    let flipped = false;
 
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -75,9 +91,14 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
       ctx.clearRect(0, 0, W, H);
       ctx.globalAlpha = fade;
 
+      // The moment of a flip: a ring of big bursts across the module.
+      if (flipAt != null && !flipped && t >= flipAt) {
+        flipped = true;
+        for (let i = 0; i < 4; i++) burst(W * (0.2 + i * 0.2), H * (0.25 + (i % 2) * 0.12), pick(BLUES.slice(0, 4)), now, true);
+      }
       if (t < duration - 2200 && now >= nextRocket) {
         rockets.push({ x: W * (0.12 + Math.random() * 0.76), y: H, vy: -(H * (0.9 + Math.random() * 0.35)), burstAt: H * (0.12 + Math.random() * 0.3), color: pick(BLUES.slice(0, 5)) });
-        nextRocket = now + 280 + Math.random() * 380;
+        nextRocket = now + (flipAt == null ? 280 : 200) + Math.random() * 380;
       }
 
       ctx.globalCompositeOperation = 'lighter';
@@ -93,7 +114,7 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
         ctx.lineTo(r.x, r.y + 40 * scale);
         ctx.stroke();
         if (r.y <= r.burstAt || r.vy > -60) {
-          burst(r.x, r.y, r.color, now);
+          burst(r.x, r.y, r.color, now, false);
           rockets.splice(i, 1);
         }
       }
@@ -131,7 +152,7 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
         ctx.translate(x, b.y);
         ctx.rotate(b.angle);
         // A flat piece turning over: its width shrinks and grows.
-        ctx.fillStyle = b.color;
+        ctx.fillStyle = flipAt != null && t < b.turn ? b.red : b.color;
         ctx.fillRect(-b.w / 2, -b.h / 2, b.w * Math.abs(Math.cos(b.angle * 1.7)) + 1, b.h);
         ctx.restore();
       }
@@ -140,13 +161,16 @@ function useFireworks(canvas: React.RefObject<HTMLCanvasElement | null>, duratio
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [canvas, duration]);
+  }, [canvas, duration, flipAt]);
 }
+
+const listed = (wins: Win[]) =>
+  `${wins.slice(0, 4).map((w) => w.title).join(' · ')}${wins.length > 4 ? ` · +${wins.length - 4} more` : ''}`;
 
 export function CelebrationOverlay({ celebration, onDone }: { celebration: Celebration; onDone: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const duration = lengthOf(celebration);
-  useFireworks(canvas, duration);
+  useFireworks(canvas, duration, celebration.flip ? FLIP_AT : null);
   useEffect(() => {
     const t = setTimeout(onDone, duration);
     return () => clearTimeout(t);
@@ -154,18 +178,38 @@ export function CelebrationOverlay({ celebration, onDone }: { celebration: Celeb
 
   const { wins } = celebration;
   const one = wins.length === 1 ? wins[0] : null;
-  const flips = wins.filter((w) => w.gain).length;
+
+  if (celebration.flip) {
+    const flips = wins.filter((w) => w.fromR);
+    const others = wins.length - flips.length;
+    const first = flips[0];
+    return (
+      <div className="cele flip" style={{ animationDuration: `${duration}ms` }}>
+        <canvas ref={canvas} />
+        <div className="cele-card flip" style={{ animationDuration: `${FLIP_AT * 1.6}ms` }}>
+          <div className="face front">
+            <span className="cele-flip">{flips.length === 1 ? 'Republican seat' : `${flips.length} Republican seats`}</span>
+            <b>{flips.length === 1 ? first.title : `${flips.length} seats`}</b>
+            <span>{flips.length === 1 ? 'Held by the GOP' : listed(flips)}</span>
+          </div>
+          <div className="face back">
+            <span className="cele-flip">{flips.length === 1 ? first.title : listed(flips)}</span>
+            <b>{flips.length === 1 ? 'Democratic flip' : `${flips.length} Democratic flips`}</b>
+            <span>{flips.length === 1 ? first.name : ''}{others > 0 ? `${flips.length === 1 ? ' · ' : ''}plus ${others} more Democratic win${others === 1 ? '' : 's'}` : ''}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const gains = wins.filter((w) => w.gain).length;
   return (
     <div className="cele" style={{ animationDuration: `${duration}ms` }}>
       <canvas ref={canvas} />
       <div className="cele-card">
-        {flips > 0 && <span className="cele-flip">{flips === 1 ? 'Democratic pickup' : `${flips} Democratic pickups`}</span>}
+        {gains > 0 && <span className="cele-flip">{gains === 1 ? 'Democratic pickup' : `${gains} Democratic pickups`}</span>}
         <b>{one ? 'Democratic win' : `${wins.length} Democratic wins`}</b>
-        {one ? (
-          <span>{one.title} · {one.name}</span>
-        ) : (
-          <span>{wins.slice(0, 4).map((w) => w.title).join(' · ')}{wins.length > 4 ? ` · +${wins.length - 4} more` : ''}</span>
-        )}
+        <span>{one ? `${one.title} · ${one.name}` : listed(wins)}</span>
       </div>
     </div>
   );

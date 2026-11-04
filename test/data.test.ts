@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachPriors, isChicagoBoard, parseDistrictKey, partyOf, readRegionRaces, seatLabel, seatOrder } from '../src/data';
-import { readIds } from '../src/config';
+import { attachPriors, parseDistrictKey, partyOf, readApBoard, readRegionRaces, seatLabel, seatOrder } from '../src/data';
 import { lastName } from '../src/index';
 
 // Trimmed from civicAPI's /race/87524 and /forecast/house/2026/civicapi.
@@ -65,21 +64,39 @@ describe('helpers', () => {
     expect(labels).toEqual(['President', '1A', '1B', '2A', '10B']);
   });
 
-  it('tells Chicago from suburban boards', () => {
-    expect(isChicagoBoard('Chicago Board of Education District 4A')).toBe(true);
-    expect(isChicagoBoard('Board of Education District 4A', 'Chicago')).toBe(true);
-    expect(isChicagoBoard('Board of Education District 203', 'Naperville')).toBe(false);
-    expect(isChicagoBoard('Chicago City Council')).toBe(false);
-  });
-
-  it('reads race ids from settings', () => {
-    expect(readIds('123, 456 789')).toEqual([123, 456, 789]);
-    expect(readIds('')).toEqual([]);
-  });
 
   it('shortens names', () => {
     expect(lastName('Nick Begich III')).toBe('Begich');
     expect(lastName('Sidney “Sid” Hill')).toBe('Hill');
     expect(lastName('Victor P. Henderson')).toBe('Henderson');
+  });
+});
+
+// Trimmed from the Sun-Times' copy of AP's Illinois results.
+const ap = {
+  races: [
+    { raceID: '84958', officeName: 'Chicago Board of Education', seatName: 'Subdistrict 6A', eevp: 41, reportingUnits: [{ eevp: 41, precinctsReportingPct: 38, candidates: [
+      { first: 'Anusha', last: 'Thotakura', incumbent: true, voteCount: 5200 },
+      { first: 'Isaiah', last: 'White', voteCount: 6100 },
+      { first: 'Brenda', middle: 'Lee', last: 'Anderson', voteCount: 900 },
+    ] }] },
+    { raceID: '84957', officeName: 'Chicago Board of Education', seatName: 'Subdistrict 4B', reportingUnits: [{ eevp: 0, precinctsReportingPct: 0, candidates: [
+      { first: 'Ellen', last: 'Rosenfeld', voteCount: 0, winner: 'X' },
+    ] }] },
+    { raceID: '84969', officeName: 'Chicago Board of Education', seatName: 'Board President', reportingUnits: [{ eevp: 0, precinctsReportingPct: 12, candidates: [] }] },
+    { raceID: '14050', officeName: 'State Senate', seatName: 'District 1', reportingUnits: [{ candidates: [] }] },
+  ],
+};
+
+describe('readApBoard', () => {
+  it('reads the board races, most votes first, with AP calls', () => {
+    const races = readApBoard(ap);
+    expect(races.map((r) => seatLabel(r.name))).toEqual(['6A', '4B', 'President']);
+    expect(races[0].reporting).toBe(41);
+    expect(races[0].candidates.map((c) => c.name)).toEqual(['Isaiah White', 'Anusha Thotakura', 'Brenda Anderson']);
+    expect(races[0].candidates[1].incumbent).toBe(true);
+    expect(races[1].candidates[0].winner).toBe(true);
+    // No expected-vote share yet: the share of precincts instead.
+    expect(races[2].reporting).toBe(12);
   });
 });

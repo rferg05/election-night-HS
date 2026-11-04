@@ -2,18 +2,21 @@
 
 Home Screens module: a full-screen board of live results for the 3 November 2026 midterms, made to read from across the room. It's added at 1920 × 1080 with square corners, to fill the screen; it scales to any size, and switches to a stacked layout on a portrait screen.
 
+Text sizes come from the module's size: the root is 26 px on a 1920 × 1080 module (21 px on a 1080 × 1920 portrait one) and scales with it, so the smallest text, such as a race's vote shares or a feed item's time, is about 20 px. *Text size* in the settings, and the Style panel's Text size, scale it from there. The race list and the live feed show only as many rows as fit at that size, so larger text means fewer at a time.
+
 ## What it shows
 
 The layout follows the Election Night 2026 board it's modelled on (dark theme, same panels and colors), made to be watched rather than clicked: anything that board let you click through now turns over on its own.
 
-- **Header.** A Live chip with when the count was last updated (amber if civicAPI isn't answering, with the time of the count shown) and a clock.
-- **Senate and House panels.** Each party's gains (seats won from the other party, in called races) with the net change and how many more flips look likely, a seat bar with the majority mark, seats won with "+n ahead" in uncalled races, what each party still needs, and each party's expected seats. The Senate counts the 65 seats not up this year (34 Dem caucus, counting King and Sanders, and 31 GOP); the vice president breaks a 50–50 tie for the GOP.
+- **Header.** The title, a Live chip with when the count was last updated (amber if civicAPI isn't answering, with the time of the count shown) and a clock.
+- **Senate and House panels.** Each party's gains (seats won from the other party, in called races) with the net change and how many more flips look likely, a seat bar with the majority mark, seats won with "+n ahead" in uncalled races, what each party still needs, and each party's expected seats ("Expected 52–47–1", Democrats first). The Senate counts the 65 seats not up this year (34 Dem caucus, counting King and Sanders, and 31 GOP); the vice president breaks a 50–50 tie for the GOP.
 - **Map.** The real state outlines, with the small Northeast states as boxes beside the Atlantic. The Senate map shows holds, flips (hatched) and, fainter, races this module thinks are likely but aren't called, with the share counted under each state. The House map shows flips by state ("+2D"). It switches between the two (or shows one).
 - **Next poll closing.** A countdown to the next closing and the Senate races in it.
-- **Race desk.** Every Senate race, then the House seats worth watching (the template board's 91-seat watch list, anything civicAPI rates a toss-up or lean, and any seat changing hands), a page at a time. Races being counted come first, closest first; then the latest calls; then those still waiting, by poll closing. Each row has the candidates, vote shares with a bar, the share counted, the pre-election rating, and either the call (D HOLD, R GAIN) or this module's read (Likely D, 96% to win; Too close).
-- **Live feed.** The last 30 minutes, newest first, a page at a time: race calls as this module sees them (every Senate race and the watched House seats), Senate lead changes, poll closings, and election headlines from AP, CBS News, The New York Times, PBS and NPR. Items from the last 3 minutes are highlighted.
-- **Democratic wins.** When a race is called for a Democrat, blue fireworks and confetti play over the module with a banner naming the seat (and "Democratic pickup" if it's a flip): 10 seconds for a Senate seat or a pickup, 7 for anything else. Wins called in the same update share one celebration ("5 Democratic wins"). Calls already made the first time the module ever runs don't set it off, and a celebration more than 3 minutes old is skipped. It can be turned off in the settings.
-- **Chicago Board of Education.** The board president's race and the 20 district seats (1A to 10B): each seat's leader and vote share, gold once called.
+- **Race desk.** Every Senate race, then the House seats worth watching (the template board's 91-seat watch list, anything civicAPI rates a toss-up or lean, and any seat changing hands), a page at a time. Races being counted come first, closest first; then the latest calls; then those with polls closed but no votes yet. Races whose polls haven't closed (the countdown covers those) and House calls more than an hour old are left out, to keep the round short. Each row has the candidates' last names in their party's color, vote shares with a bar and the share counted (the pre-election rating, before any votes), and either the call (D HOLD, R GAIN) or this module's read (Likely D, 96% to win; Too close). About four rows to a page on a full screen.
+- **Live feed.** The last 30 minutes, newest first, a page at a time: race calls as this module sees them (every Senate race and the watched House seats), Senate lead changes, poll closings, and election headlines from AP, CBS News, The New York Times, PBS and NPR. Three to a page on a full screen, each with up to three lines of headline. Items from the last 3 minutes are highlighted.
+- **Democratic wins.** When a race is called for a Democrat, blue fireworks and confetti play over the module with a banner naming the seat: 10 seconds for a Senate seat or a pickup, 7 for anything else. Wins called in the same update share one celebration ("5 Democratic wins"). Calls already made the first time the module ever runs don't set it off, and a celebration more than 3 minutes old is skipped.
+- **Democratic flips.** When Democrats take a seat the Republicans held, it's a flip instead: the banner starts red ("Republican seat · Maine Senate"), turns over to blue ("Democratic flip"), and the confetti turns from red to blue with it, in a wave across the screen, before the fireworks start (12 seconds). An update with flips and other wins shows the flips and counts the rest. Each kind can be turned off on its own in the settings; with only flips on, other wins don't celebrate.
+- **Chicago Board of Education.** The board president's race and District 6A: the leader and runner-up with their shares and a bar, and the share counted, marked once AP calls it. It takes little room, so the live feed above it gets the rest.
 
 ## Who's likely to win
 
@@ -33,7 +36,7 @@ The model is deliberately simple. It doesn't know which counties are still out, 
 - `GET /api/v2/race/87528`: every Senate race, by state.
 - `GET /api/v2/race/87524`: every House race, by district.
 - `GET /api/v2/forecast/{senate|house}/2026/civicapi`: the pre-election ratings and win chances used before votes come in.
-- Chicago school board: found with `/api/v2/race/search`, then each race by its ID. The school board refreshes half as often as the federal races.
+- Chicago Board of Education: the Chicago Sun-Times' copy of AP's Illinois results (`graphics.suntimes.com/…/statewide-results.json`, the data behind its [results page](https://chicago.suntimes.com/elections/2026/graphics/voter-guide-midterm-election-illinois/illinois-midterm-results-2026/)), checked as often as the federal results. civicAPI doesn't carry these races. In AP's data the president's race is 84969 and District 6A is 84958; the module finds them by name.
 
 - Headlines: the politics feeds of CBS News, The New York Times, PBS and NPR, and AP's stories by way of Google News, every 2 minutes. Only election stories are kept.
 - Seat holders and ratings when civicAPI's forecast can't be had: the template board's tables (Senate: Cook Political Report; House watch list: PollingSource, plus four Inside Elections additions).
@@ -43,21 +46,20 @@ civicAPI doesn't say when a race was called, so a call's time in the feed and on
 
 civicAPI was overloaded on election night, with stretches of 502 errors and minute-long answers. The module keeps what it last had: each chamber shows as soon as it's in, the forecast is kept once had, and the last count is saved in the browser, so after a restart the board shows it at once (the header says so) until a new one comes in.
 
-civicAPI's search was overloaded on election day and often timed out. The module retries every 10 minutes, and the federal results don't wait on it. If it never finds the school board, look up the race IDs on civicapi.org (the number at the end of a race's link) and paste them into **School board race IDs**.
-
 ## Settings
 
 | Setting | Default | |
 |---|---|---|
+| Text size | 1× | 0.6–1.6×. |
 | Map shows | Senate and House in turn | Or just one. |
 | Switch map every | 20 s | 5 to 300 seconds. |
 | Turn the race list and feed every | 10 s | 4 to 60 seconds. |
 | Check for new results every | 60 s | 30 to 600 seconds. |
 | Election headlines in the live feed | on | |
 | Live feed shows the last | 30 min | 5 to 240 minutes. |
-| Celebrate Democratic wins | on | |
+| Celebrate every Democratic win | on | |
+| Celebrate Democratic flips | on | Red turning blue, for a seat taken from the Republicans. |
 | Chicago Board of Education | on | |
-| School board race IDs | empty | civicAPI race IDs, comma-separated, if the search can't find them. |
 
 ## Install
 
@@ -75,9 +77,9 @@ npm run build     # dist/bundle.js
 Preview options:
 
 - `?sim=40` fills every race with a made-up count about 40% in, so you can check the layout and likelihoods before real votes arrive.
-- `?board=fake` shows stand-in school board races.
+- `?board=fake` shows stand-in school board results in place of the Sun-Times'.
 - `?map=house`, `?w=1080&h=1920` and similar change the map view and module size.
-- The **Celebrate 1** and **Celebrate 5** buttons play the Democratic-win celebration.
+- The **Celebrate win**, **Celebrate flip** and **Celebrate 4** buttons play the celebrations.
 
 To package: copy `manifest.json` and `dist/bundle.js(.map)` into `release/pkg/election-night/`, then run
 `tar -czf release/election-night-<version>.tar.gz -C release/pkg election-night`. Copy the result to `release/election-night.tar.gz` and attach both to a GitHub release tagged `v<version>`.
