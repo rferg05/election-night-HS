@@ -1,0 +1,132 @@
+{
+  "id": "election-night",
+  "name": "Election Night",
+  "version": "1.2.1",
+  "description": "A full-screen board of live results for the 3 November 2026 House and Senate races, laid out like a broadcast board: party gains and seat counts toward a majority, a map of calls and flips, the next poll closing, a race desk that pages through every Senate race and the competitive House seats with who's likely to win as votes come in, a live feed of calls and election headlines from the last half hour, and the Chicago Board of Education.",
+  "author": "Ryan",
+  "license": "MIT",
+  "minAppVersion": "1.13.0",
+  "moduleType": "election-night",
+  "category": "Information",
+  "icon": "Vote",
+  "defaultConfig": {
+    "refreshSeconds": 60,
+    "map": "rotate",
+    "rotateSeconds": 20,
+    "pageSeconds": 10,
+    "news": true,
+    "feedMinutes": 30,
+    "schoolBoard": true,
+    "schoolBoardIds": "",
+    "celebrate": true
+  },
+  "defaultSize": {
+    "w": 1920,
+    "h": 1080
+  },
+  "defaultStyle": {
+    "fontSize": 16,
+    "padding": 0,
+    "borderRadius": 0,
+    "backgroundColor": "rgba(14, 17, 22, 0.92)"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "map": {
+        "type": "string",
+        "title": "Map shows",
+        "enum": [
+          "rotate",
+          "senate",
+          "house"
+        ],
+        "enumLabels": [
+          "Senate and House in turn",
+          "Senate",
+          "House"
+        ],
+        "ui:widget": "select",
+        "ui:group": "Map"
+      },
+      "rotateSeconds": {
+        "type": "number",
+        "title": "Switch map every (seconds)",
+        "minimum": 5,
+        "maximum": 300,
+        "ui:widget": "slider",
+        "ui:step": 5,
+        "ui:group": "Map"
+      },
+      "pageSeconds": {
+        "type": "number",
+        "title": "Turn the race list and feed every (seconds)",
+        "minimum": 4,
+        "maximum": 60,
+        "ui:widget": "slider",
+        "ui:step": 1,
+        "ui:group": "Results"
+      },
+      "refreshSeconds": {
+        "type": "number",
+        "title": "Check for new results every (seconds)",
+        "minimum": 30,
+        "maximum": 600,
+        "ui:widget": "slider",
+        "ui:step": 15,
+        "ui:group": "Results"
+      },
+      "news": {
+        "type": "boolean",
+        "title": "Election headlines in the live feed",
+        "description": "From AP, CBS News, The New York Times, PBS and NPR.",
+        "ui:widget": "toggle",
+        "ui:group": "Live feed"
+      },
+      "feedMinutes": {
+        "type": "number",
+        "title": "Live feed shows the last (minutes)",
+        "minimum": 5,
+        "maximum": 240,
+        "ui:widget": "slider",
+        "ui:step": 5,
+        "ui:group": "Live feed"
+      },
+      "celebrate": {
+        "type": "boolean",
+        "title": "Celebrate Democratic wins",
+        "description": "Blue fireworks and confetti over the module when a race is called for a Democrat. Wins called in the same update share one celebration.",
+        "ui:widget": "toggle",
+        "ui:group": "Celebration"
+      },
+      "schoolBoard": {
+        "type": "boolean",
+        "title": "Chicago Board of Education",
+        "ui:widget": "toggle",
+        "ui:group": "Chicago"
+      },
+      "schoolBoardIds": {
+        "type": "string",
+        "title": "School board race IDs",
+        "description": "Leave empty to find them automatically. If they aren't found, paste civicAPI race IDs here, separated by commas (the number at the end of a race's civicapi.org link).",
+        "ui:group": "Chicago"
+      }
+    }
+  },
+  "allowedDomains": [
+    "civicapi.org",
+    "news.google.com",
+    "www.cbsnews.com",
+    "rss.nytimes.com",
+    "www.pbs.org",
+    "feeds.npr.org"
+  ],
+  "exports": {
+    "component": "default"
+  },
+  "dataRequirements": [],
+  "prefetchUrl": null,
+  "permissions": [
+    "network"
+  ]
+}
