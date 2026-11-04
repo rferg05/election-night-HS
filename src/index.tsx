@@ -75,12 +75,14 @@ interface Store {
   wins: Win[];
   /** Waiting to be shown, oldest first. */
   celebrations: Celebration[];
+  /** Showings already played, as "id:n". */
+  played: Set<string>;
 }
 
 const store: Store = {
   senate: null, house: null, school: [], schoolFailed: false,
   schoolLoadedAt: 0, schoolLoading: null, failure: null, loadedAt: 0, savedAt: 0, loading: null,
-  news: [], newsLoadedAt: 0, newsLoading: null, calls: null, callsPrimed: false, leaders: {}, leads: [], wins: [], celebrations: [],
+  news: [], newsLoadedAt: 0, newsLoading: null, calls: null, callsPrimed: false, leaders: {}, leads: [], wins: [], celebrations: [], played: new Set(),
 };
 
 /** Re-render on a partial load. */
@@ -202,7 +204,7 @@ function refresh(fetcher: Fetcher, cfg: Config): Promise<void> | null {
     // One celebration for everything a count brings in, Senate seats first.
     if (store.wins.length) {
       const wins = store.wins.sort((a, b) => Number(b.senate) - Number(a.senate) || Number(b.gain) - Number(a.gain));
-      store.celebrations = [...store.celebrations, { id: Date.now(), wins, flip: false }].slice(-3);
+      store.celebrations = [...store.celebrations, { id: Date.now(), wins, flip: false }].slice(-20);
       store.wins = [];
     }
     const failed = [senate, house].find((r): r is PromiseRejectedResult => r.status === 'rejected');
@@ -941,20 +943,24 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.loadedAt, data.newsLoadedAt, minute, cfg.feedMinutes, cfg.news, senateStates]);
 
-  // A celebration is only worth showing while it's news. Which wins it
-  // shows, and whether as a flip, is up to the settings.
-  const celebration = data.celebrations
-    .filter((c) => Date.now() - c.id < 3 * 60_000)
-    .map((c): Celebration => {
-      const wins = cfg.celebrate ? c.wins : cfg.celebrateFlips ? c.wins.filter((w) => w.fromR) : [];
-      return { ...c, wins, flip: cfg.celebrateFlips && wins.some((w) => w.fromR) };
-    })
-    .find((c) => c.wins.length > 0);
+  const gap = cfg.celebrateEvery * 60_000;
+  const late = Math.min(3 * 60_000, gap);
+  const { due, nextAt } = showingsOf(data.celebrations, data.played, Date.now(), cfg);
+  const celebration = due ? { ...due.c, id: due.at } : undefined;
   const [, setDone] = useState(0);
+  // Come back for the next showing, however quiet the count is by then.
+  useEffect(() => {
+    if (!nextAt) return;
+    const t = setTimeout(() => setDone((n) => n + 1), nextAt - Date.now() + 50);
+    return () => clearTimeout(t);
+  }, [nextAt]);
   const finish = useCallback(() => {
-    store.celebrations = store.celebrations.filter((c) => c.id > (celebration?.id ?? 0));
+    if (due) store.played.add(due.key);
+    // A celebration with every showing behind it is done with.
+    const end = (cfg.celebrateTimes - 1) * gap + late;
+    store.celebrations = store.celebrations.filter((c) => Date.now() - c.id < end);
     setDone((n) => n + 1);
-  }, [celebration?.id]);
+  }, [due?.key, cfg.celebrateTimes, gap, late]);
 
   const view = cfg.map === 'rotate' ? (mapStep % 2 === 0 ? 'senate' : 'house') : cfg.map;
   const portrait = box.h > box.w * 1.05;
@@ -1029,9 +1035,37 @@ export default function ElectionNight(props: PluginComponentProps & { fetcher?: 
   );
 }
 
+/** Which showing of which celebration is due now, and when the next one
+ *  is: each plays `celebrateTimes` times, `celebrateEvery` minutes apart,
+ *  the first as the wins come in. A showing more than 3 minutes late (the
+ *  module was off screen) is skipped. Which wins it shows, and whether as a
+ *  flip, is up to the settings. */
+export function showingsOf(
+  celebrations: Celebration[],
+  played: Set<string>,
+  now: number,
+  cfg: Pick<Config, 'celebrate' | 'celebrateFlips' | 'celebrateTimes' | 'celebrateEvery'>,
+) {
+  const gap = cfg.celebrateEvery * 60_000;
+  const late = Math.min(3 * 60_000, gap);
+  const showings = celebrations
+    .map((c): Celebration => {
+      const wins = cfg.celebrate ? c.wins : cfg.celebrateFlips ? c.wins.filter((w) => w.fromR) : [];
+      return { ...c, wins, flip: cfg.celebrateFlips && wins.some((w) => w.fromR) };
+    })
+    .filter((c) => c.wins.length > 0)
+    .flatMap((c) => Array.from({ length: cfg.celebrateTimes }, (_, n) => ({ c, key: `${c.id}:${n}`, at: c.id + n * gap })))
+    .filter((s) => !played.has(s.key))
+    .sort((a, b) => a.at - b.at);
+  return {
+    due: showings.find((s) => s.at <= now && now - s.at < late),
+    nextAt: showings.find((s) => s.at > now)?.at,
+  };
+}
+
 /** Starts a celebration as if these seats had just been called: for the
  *  preview page. */
 export function celebrateForPreview(wins: Win[]) {
-  store.celebrations = [...store.celebrations, { id: Date.now(), wins, flip: false }];
+  store.celebrations = [...store.celebrations, { id: Date.now(), wins, flip: false }].slice(-20);
   for (const l of listeners) l();
 }

@@ -3,7 +3,7 @@ import { closeAt, decode, isElectionNews, newsItems, parseRss, pollItems, stateO
 import { fillHolders } from '../src/data';
 import type { Candidate, Race } from '../src/data';
 import { project } from '../src/projection';
-import { tally } from '../src/index';
+import { showingsOf, tally } from '../src/index';
 
 const rss = `<?xml version="1.0"?><rss><channel><title>Feed</title>
 <item><title><![CDATA[Ossoff holds Georgia Senate seat, AP projects]]></title><pubDate>Wed, 04 Nov 2026 01:10:00 GMT</pubDate></item>
@@ -84,5 +84,39 @@ describe('gains', () => {
     expect(t.gains.D).toBe(1);
     expect(t.net).toEqual({ D: 1, R: -1 });
     expect(t.likely.D).toBe(1);
+  });
+});
+
+describe('celebration showings', () => {
+  const win = (fromR: boolean) => ({ title: 'X', name: 'Y', gain: fromR, fromR, senate: false });
+  const cfg = { celebrate: true, celebrateFlips: true, celebrateTimes: 3, celebrateEvery: 3 };
+  const t0 = 1_000_000;
+  const cs = [{ id: t0, wins: [win(false)], flip: false }];
+  const min = 60_000;
+
+  it('plays each one three times, three minutes apart', () => {
+    const played = new Set<string>();
+    expect(showingsOf(cs, played, t0, cfg).due?.key).toBe(`${t0}:0`);
+    played.add(`${t0}:0`);
+    // Played: nothing more until the next showing.
+    expect(showingsOf(cs, played, t0 + 10_000, cfg)).toMatchObject({ due: undefined, nextAt: t0 + 3 * min });
+    expect(showingsOf(cs, played, t0 + 3 * min, cfg).due?.key).toBe(`${t0}:1`);
+    played.add(`${t0}:1`);
+    expect(showingsOf(cs, played, t0 + 6 * min, cfg).due?.key).toBe(`${t0}:2`);
+    played.add(`${t0}:2`);
+    expect(showingsOf(cs, played, t0 + 7 * min, cfg)).toMatchObject({ due: undefined, nextAt: undefined });
+  });
+
+  it('skips a showing it missed', () => {
+    // Off screen until 4 minutes in: the first showing is stale; the second is due.
+    expect(showingsOf(cs, new Set(), t0 + 4 * min, cfg).due?.key).toBe(`${t0}:1`);
+  });
+
+  it('shows only flips when every-win celebrations are off', () => {
+    const mixed = [{ id: t0, wins: [win(false), win(true)], flip: false }];
+    const got = showingsOf(mixed, new Set(), t0, { ...cfg, celebrate: false }).due?.c;
+    expect(got?.wins).toHaveLength(1);
+    expect(got?.flip).toBe(true);
+    expect(showingsOf(cs, new Set(), t0, { ...cfg, celebrate: false }).due).toBeUndefined();
   });
 });

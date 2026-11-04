@@ -16,6 +16,10 @@ export interface Config {
   celebrate: boolean;
   /** Seats taken from the Republicans get a flip: red turning blue. */
   celebrateFlips: boolean;
+  /** Each celebration plays this many times… */
+  celebrateTimes: number;
+  /** …this many minutes apart. */
+  celebrateEvery: number;
   schoolBoard: boolean;
 }
 
@@ -39,6 +43,8 @@ export function readConfig(raw: Record<string, unknown>): Config {
     textScale: num(raw.textScale, 1, 0.6, 1.6),
     celebrate: bool(raw.celebrate, true),
     celebrateFlips: bool(raw.celebrateFlips, true),
+    celebrateTimes: Math.round(num(raw.celebrateTimes, 3, 1, 5)),
+    celebrateEvery: num(raw.celebrateEvery, 3, 1, 15),
     schoolBoard: bool(raw.schoolBoard, true),
   };
 }

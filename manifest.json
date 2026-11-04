@@ -1,7 +1,7 @@
 {
   "id": "election-night",
   "name": "Election Night",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "A full-screen board of live results for the 3 November 2026 House and Senate races, laid out like a broadcast board: party gains and seat counts toward a majority, a map of calls and flips, the next poll closing, a race desk that pages through every Senate race and the competitive House seats with who's likely to win as votes come in, a live feed of calls and election headlines from the last half hour, and the Chicago Board of Education president and District 6A.",
   "author": "Ryan",
   "license": "MIT",
@@ -19,7 +19,9 @@
     "schoolBoard": true,
     "celebrate": true,
     "textScale": 1,
-    "celebrateFlips": true
+    "celebrateFlips": true,
+    "celebrateTimes": 3,
+    "celebrateEvery": 3
   },
   "defaultSize": {
     "w": 1920,
@@ -115,6 +117,25 @@
         "title": "Celebrate Democratic flips",
         "description": "When Democrats take a seat the Republicans held: the banner turns from red to blue, then the confetti and fireworks start. Works on its own with the setting above turned off.",
         "ui:widget": "toggle",
+        "ui:group": "Celebration"
+      },
+      "celebrateTimes": {
+        "type": "number",
+        "title": "Play each celebration",
+        "description": "How many times each celebration plays: the first when the race is called, the rest after the gap below.",
+        "minimum": 1,
+        "maximum": 5,
+        "ui:widget": "slider",
+        "ui:step": 1,
+        "ui:group": "Celebration"
+      },
+      "celebrateEvery": {
+        "type": "number",
+        "title": "Replay every (minutes)",
+        "minimum": 1,
+        "maximum": 15,
+        "ui:widget": "slider",
+        "ui:step": 1,
         "ui:group": "Celebration"
       },
       "schoolBoard": {
